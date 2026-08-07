@@ -1,0 +1,18 @@
+{
+  "name": "Nest — Shared Lists",
+  "short_name": "Nest",
+  "description": "A clean, shared grocery and todo list app.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f9f6",
+  "theme_color": "#ffffff",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
