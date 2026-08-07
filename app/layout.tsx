@@ -2,26 +2,42 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Geist } from 'next/font/google'
 import { ThemeProvider } from '@/components/theme-provider'
+import { PwaRegister } from '@/src/modules/app-shell'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Nasza lista',
-  description: 'A clean, shared grocery and todo list app for you and your people.',
-  generator: 'v0.app',
+  title: 'List Up!',
+  description: 'Wspólne listy zakupów i zadań zawsze pod ręką.',
+  applicationName: 'List Up!',
   manifest: '/manifest.webmanifest',
+  icons: {
+    icon: [
+      {
+        url: '/icon-light-32x32.png',
+        type: 'image/png',
+        media: '(prefers-color-scheme: light)',
+      },
+      {
+        url: '/icon-dark-32x32.png',
+        type: 'image/png',
+        media: '(prefers-color-scheme: dark)',
+      },
+    ],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Nest',
+    title: 'List Up!',
   },
 }
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#000000' },
+    { media: '(prefers-color-scheme: light)', color: '#0f9b76' },
+    { media: '(prefers-color-scheme: dark)', color: '#171c1a' },
   ],
   width: 'device-width',
   initialScale: 1,
@@ -36,10 +52,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className="bg-background" suppressHydrationWarning>
+    <html lang="pl" className="bg-background" suppressHydrationWarning>
       <body className={`${geist.className} antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           {children}
+          <PwaRegister />
           {process.env.NODE_ENV === 'production' && <Analytics />}
         </ThemeProvider>
       </body>

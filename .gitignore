@@ -21,3 +21,4 @@ blob-report/
 
 # TS compiler cache
 *.tsbuildinfo
+tsconfig.tsbuildinfo

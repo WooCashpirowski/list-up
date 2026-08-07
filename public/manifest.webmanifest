@@ -1,18 +1,36 @@
 {
-  "name": "Nest — Shared Lists",
-  "short_name": "Nest",
-  "description": "A clean, shared grocery and todo list app.",
+  "id": "/",
+  "name": "List Up!",
+  "short_name": "List Up!",
+  "description": "Wspólne listy zakupów i zadań zawsze pod ręką.",
+  "lang": "pl",
+  "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f7f9f6",
-  "theme_color": "#ffffff",
-  "orientation": "portrait",
+  "theme_color": "#0f9b76",
+  "orientation": "any",
+  "categories": ["productivity", "shopping", "utilities"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/pwa-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

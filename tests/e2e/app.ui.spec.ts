@@ -31,7 +31,7 @@ async function signInViaUi(page: Page) {
   }
 
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Welcome to Nest' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome to List Up!' })).toBeVisible()
   await page.getByLabel('Email').fill(testEmail)
   await page.getByLabel('Password').fill(testPassword)
   await page.getByRole('button', { name: 'Sign in' }).click()
@@ -127,12 +127,12 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await page.getByRole('button', { name: 'Switch language to Polish' }).click()
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'pl')
-    await expect(page.getByRole('heading', { name: 'Witaj w Nest' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Witaj w List Up!' })).toBeVisible()
     await expect(page.getByLabel('E-mail')).toBeVisible()
     await expect(page.getByLabel('Hasło')).toBeVisible()
 
     await page.reload()
-    await expect(page.getByRole('heading', { name: 'Witaj w Nest' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Witaj w List Up!' })).toBeVisible()
 
     await page.getByLabel('E-mail').fill(testEmail!)
     await page.getByLabel('Hasło').fill(testPassword!)
@@ -165,8 +165,20 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
     await expectDatabaseCount(client, 'lists', listTitle, 1)
 
-    await page.getByRole('button', { name: /Owoce/ }).click()
-    await page.getByPlaceholder('Add an item…').fill(itemName)
+    const itemInput = page.getByRole('combobox', { name: 'Item name' })
+    await itemInput.fill('j')
+    await expect(page.getByRole('listbox')).toHaveCount(0)
+
+    await itemInput.fill('ja')
+    const fruitSuggestion = page.getByRole('option', { name: /jabłko.*Owoce/i })
+    await expect(fruitSuggestion).toBeVisible()
+    await fruitSuggestion.click()
+    await expect(itemInput).toHaveValue('jabłko')
+    await expect(page.getByRole('button', { name: /Owoce/ })).toHaveClass(
+      /bg-primary/,
+    )
+
+    await itemInput.fill(itemName)
     await page.getByPlaceholder('Qty').fill('2')
     await page.getByRole('button', { name: 'Add item' }).click()
 
@@ -305,6 +317,6 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
   test('logs out and returns to the login screen', async ({ page }) => {
     await signInViaUi(page)
     await page.getByRole('button', { name: 'Logout' }).click()
-    await expect(page.getByRole('heading', { name: 'Welcome to Nest' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Welcome to List Up!' })).toBeVisible()
   })
 })

@@ -36,6 +36,7 @@ import type { List } from '@/src/modules/lists/types/list.types'
 
 import type { PendingItem } from '../hooks/use-item-composer'
 import type { ListItem } from '../types/list-item.types'
+import { ItemAutocomplete } from './item-autocomplete'
 
 const UNCATEGORIZED_ID = '__other__'
 
@@ -323,14 +324,12 @@ export function ListView({
 
         <div className="px-4 pb-3">
           <div className="flex items-center gap-2 rounded-2xl border border-input bg-card p-1.5 shadow-sm">
-            <input
+            <ItemAutocomplete
+              categories={categories}
               value={name}
-              onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void submit()
-              }}
-              placeholder={t('list.addItemPlaceholder')}
-              className="min-w-0 flex-1 bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
+              onChange={setName}
+              onSelect={(suggestion) => setSelectedCategory(suggestion.categoryId)}
+              onSubmit={() => void submit()}
             />
             <input
               value={quantity}
