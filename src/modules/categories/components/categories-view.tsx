@@ -1,18 +1,23 @@
 'use client'
 
-import { Check, Pencil, Plus, Search, Tags, Trash2, X } from 'lucide-react'
+import { Pencil, Plus, Search, Tags, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { useI18n } from '@/src/modules/i18n'
 import type { ListItem } from '@/src/modules/list-items/types/list-item.types'
 
 import type { Category } from '../types/category.types'
+import { CategoryEditModal } from './category-edit-modal'
 
 type CategoriesViewProps = {
   categories: Category[]
   items: ListItem[]
   onCreateCategory: (name: string) => Promise<string | null>
-  onRenameCategory: (id: string, name: string) => Promise<boolean>
+  onSaveCategory: (
+    id: string,
+    name: string,
+    keywords: string[],
+  ) => Promise<boolean>
   onDeleteCategory: (id: string) => Promise<void>
 }
 
@@ -49,13 +54,12 @@ export function CategoriesView({
   categories,
   items,
   onCreateCategory,
-  onRenameCategory,
+  onSaveCategory,
   onDeleteCategory,
 }: CategoriesViewProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
 
@@ -106,11 +110,8 @@ export function CategoriesView({
     setAdding(false)
   }
 
-  async function submitRename(id: string) {
-    if (!draft.trim()) return
-    const renamed = await onRenameCategory(id, draft)
-    if (renamed) setEditingId(null)
-  }
+  const editingCategory =
+    categories.find((category) => category.id === editingId) ?? null
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col px-5 pb-28 pt-14">
@@ -180,8 +181,6 @@ export function CategoriesView({
           const categoryItems = Array.from(
             itemsByCategory.get(category.id)?.values() ?? [],
           )
-          const isEditing = editingId === category.id
-
           return (
             <article
               key={category.id}
@@ -191,61 +190,34 @@ export function CategoriesView({
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-accent text-lg">
                   {getCategoryEmoji(category.name)}
                 </span>
-                {isEditing ? (
-                  <input
-                    autoFocus
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') void submitRename(category.id)
-                      if (event.key === 'Escape') setEditingId(null)
-                    }}
-                    aria-label={t('categories.newName', { name: category.name })}
-                    className="min-w-0 flex-1 rounded-xl border border-primary bg-secondary px-3 py-1.5 text-base font-semibold outline-none"
-                  />
-                ) : (
-                  <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
-                    {category.name}
-                  </h2>
-                )}
+                <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
+                  {category.name}
+                </h2>
 
-                {isEditing ? (
+                <>
                   <button
-                    onClick={() => void submitRename(category.id)}
-                    aria-label={t('categories.saveName')}
-                    className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                    onClick={() => setEditingId(category.id)}
+                    aria-label={t('categories.edit', { name: category.name })}
+                    className="flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-primary"
                   >
-                    <Check className="size-4" />
+                    <Pencil className="size-4" />
                   </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => {
-                        setEditingId(category.id)
-                        setDraft(category.name)
-                      }}
-                      aria-label={t('categories.edit', { name: category.name })}
-                      className="flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-primary"
-                    >
-                      <Pencil className="size-4" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            t('categories.deleteConfirm', { name: category.name }),
-                          )
-                        ) {
-                          void onDeleteCategory(category.id)
-                        }
-                      }}
-                      aria-label={t('categories.delete', { name: category.name })}
-                      className="flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-destructive"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </>
-                )}
+                  <button
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          t('categories.deleteConfirm', { name: category.name }),
+                        )
+                      ) {
+                        void onDeleteCategory(category.id)
+                      }
+                    }}
+                    aria-label={t('categories.delete', { name: category.name })}
+                    className="flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-destructive"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </>
               </div>
 
               {categoryItems.length > 0 ? (
@@ -283,6 +255,15 @@ export function CategoriesView({
       >
         <Plus className="size-6" strokeWidth={2.5} />
       </button>
+
+      {editingCategory && (
+        <CategoryEditModal
+          key={editingCategory.id}
+          category={editingCategory}
+          onClose={() => setEditingId(null)}
+          onSave={onSaveCategory}
+        />
+      )}
     </div>
   )
 }

@@ -79,7 +79,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
           categories={categoriesState.categories}
           items={itemsState.items}
           onCreateCategory={categoriesState.createCategory}
-          onRenameCategory={categoriesState.renameCategory}
+          onSaveCategory={categoriesState.saveCategory}
           onDeleteCategory={categoriesState.deleteCategory}
         />
       )}

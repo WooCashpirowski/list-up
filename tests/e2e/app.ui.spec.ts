@@ -210,6 +210,7 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     const originalName = `Playwright category ${suffix}`
     const renamedName = `${originalName} renamed`
+    const categoryItem = `Playwright category item ${suffix}`
     cleanupCategoryNames.add(originalName)
     cleanupCategoryNames.add(renamedName)
 
@@ -223,12 +224,30 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await expectDatabaseCount(client, 'categories', originalName, 1)
 
     await page.getByRole('button', { name: `Edit ${originalName}` }).click()
-    await page.getByLabel(`New name for ${originalName}`).fill(renamedName)
-    await page.getByRole('button', { name: 'Save category name' }).click()
+    const editDialog = page.getByRole('dialog', { name: 'Edit category' })
+    await expect(editDialog).toBeVisible()
+    await editDialog.getByLabel('Category name').fill(renamedName)
+    await editDialog.getByPlaceholder('e.g. avocado').fill(categoryItem)
+    // Saving directly must also include the value currently typed in the
+    // item input; clicking the separate plus button is optional.
+    await editDialog.getByRole('button', { name: 'Save changes' }).click()
+
+    await expect(editDialog).toHaveCount(0)
     await expect(page.getByRole('heading', { name: renamedName })).toBeVisible()
     await expectDatabaseCount(client, 'categories', renamedName, 1)
+    await expect
+      .poll(async () => {
+        const { data, error } = await client
+          .from('categories')
+          .select('keywords')
+          .eq('name', renamedName)
+          .single()
+        expect(error).toBeNull()
+        return data?.keywords.includes(categoryItem)
+      })
+      .toBe(true)
 
-    await page.getByPlaceholder('Search categories or items').fill(renamedName)
+    await page.getByPlaceholder('Search categories or items').fill(categoryItem)
     await expect(page.getByRole('heading', { name: renamedName })).toBeVisible()
 
     page.once('dialog', (dialog) => void dialog.accept())

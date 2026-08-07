@@ -136,8 +136,20 @@ export function useCategories(userId: string) {
     [categories, supabase],
   )
 
-  const renameCategory = useCallback(
-    (id: string, name: string) => updateCategory(id, { name: name.trim() }),
+  const saveCategory = useCallback(
+    (id: string, name: string, keywords: string[]) => {
+      const uniqueKeywords = new Map<string, string>()
+      for (const keyword of keywords) {
+        const trimmedKeyword = keyword.trim()
+        if (!trimmedKeyword) continue
+        uniqueKeywords.set(trimmedKeyword.toLocaleLowerCase('pl'), trimmedKeyword)
+      }
+
+      return updateCategory(id, {
+        name: name.trim(),
+        keywords: Array.from(uniqueKeywords.values()),
+      })
+    },
     [updateCategory],
   )
 
@@ -166,7 +178,7 @@ export function useCategories(userId: string) {
     refresh,
     createCategory,
     updateCategory,
-    renameCategory,
+    saveCategory,
     deleteCategory,
   }
 }
