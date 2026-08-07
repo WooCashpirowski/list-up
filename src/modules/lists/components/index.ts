@@ -1,2 +1,1 @@
-// List components will be exported from this module boundary.
-export {}
+export { HomeView } from './home-view'

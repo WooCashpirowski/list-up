@@ -5,3 +5,4 @@ export {
   getCategoryById,
   updateCategory,
 } from './categories.service'
+export { findCategoryForItem } from './category-matcher'

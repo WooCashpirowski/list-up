@@ -1,2 +1,1 @@
-// List business-logic hooks will be exported from this module boundary.
-export {}
+export { useLists } from './use-lists'

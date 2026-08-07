@@ -7,6 +7,19 @@ import type {
   UpdateListItemInput,
 } from '../types/list-item.types'
 
+export async function getAllListItems(
+  client?: AppSupabaseClient,
+): Promise<ListItem[]> {
+  const supabase = resolveSupabaseClient(client)
+  const { data } = await supabase
+    .from('list_items')
+    .select('*')
+    .order('created_at', { ascending: true })
+    .throwOnError()
+
+  return data
+}
+
 export async function getListItems(
   listId: string,
   client?: AppSupabaseClient,
@@ -83,4 +96,19 @@ export async function deleteListItem(
     .throwOnError()
 
   return data
+}
+
+export async function clearListItems(
+  listId: string,
+  onlyDone = false,
+  client?: AppSupabaseClient,
+): Promise<void> {
+  const supabase = resolveSupabaseClient(client)
+  let query = supabase.from('list_items').delete().eq('list_id', listId)
+
+  if (onlyDone) {
+    query = query.eq('is_done', true)
+  }
+
+  await query.throwOnError()
 }

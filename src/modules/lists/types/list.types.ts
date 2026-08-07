@@ -22,6 +22,6 @@ export type ListUpdate = {
   updated_at?: string
 }
 
-export type CreateListInput = Pick<ListInsert, 'title'>
+export type CreateListInput = Pick<ListInsert, 'id' | 'title'>
 
 export type UpdateListInput = Pick<ListUpdate, 'title'>

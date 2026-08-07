@@ -39,7 +39,7 @@ export type ListItemUpdate = {
 
 export type CreateListItemInput = Pick<
   ListItemInsert,
-  'list_id' | 'category_id' | 'name' | 'quantity'
+  'id' | 'list_id' | 'category_id' | 'name' | 'quantity'
 >
 
 export type UpdateListItemInput = Pick<

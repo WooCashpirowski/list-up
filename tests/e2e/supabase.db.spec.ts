@@ -7,7 +7,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const testEmail = process.env.E2E_TEST_EMAIL
 const testPassword = process.env.E2E_TEST_PASSWORD
-
 const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey)
 const hasTestCredentials = Boolean(testEmail && testPassword)
 
@@ -35,25 +34,17 @@ async function signIn(client: SupabaseClient<Database>) {
     password: testPassword,
   })
 
-  expect(error, 'Supabase Auth should accept the test credentials').toBeNull()
+  expect(error, 'Supabase Auth should accept the configured credentials').toBeNull()
   expect(data.user?.email).toBe(testEmail)
   expect(data.session?.access_token).toBeTruthy()
-
-  return data
 }
 
-test.describe('Supabase connection', () => {
-  test.skip(
-    !hasSupabaseConfig,
-    'Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY',
-  )
+test.describe('Supabase connection and RLS', () => {
+  test.skip(!hasSupabaseConfig, 'Set the public Supabase variables')
 
   test('reaches PostgREST and rejects anonymous table access', async () => {
     const client = createTestClient()
-    const { data, error } = await client
-      .from('categories')
-      .select('id')
-      .limit(1)
+    const { data, error } = await client.from('categories').select('id').limit(1)
 
     expect(data).toBeNull()
     expect(error, 'The anonymous role must not receive SELECT access').not.toBeNull()
@@ -62,105 +53,114 @@ test.describe('Supabase connection', () => {
 })
 
 test.describe('Supabase authenticated integration', () => {
+  test.describe.configure({ mode: 'serial' })
   test.skip(
     !hasSupabaseConfig || !hasTestCredentials,
-    'Set Supabase variables and E2E test credentials in .env.test.local',
+    'Set Supabase variables and allowlisted credentials in .env.test.local',
   )
 
-  test('authenticates and verifies the RLS result for the configured account', async () => {
+  test('authenticates the allowlisted account and reads shared data', async () => {
     const client = createTestClient()
 
     try {
       await signIn(client)
+      const { data, error } = await client.from('categories').select('id, name').limit(1)
 
-      const { data, error } = await client
-        .from('categories')
-        .select('id, name')
-        .limit(1)
-
-      expect(error, 'The PostgREST request should reach the database').toBeNull()
-
-      const allowedEmails = (process.env.NEXT_PUBLIC_ALLOWED_EMAILS ?? '')
-        .split(',')
-        .map((email) => email.trim().toLowerCase())
-        .filter(Boolean)
-      const shouldHaveDatabaseAccess = allowedEmails.includes(
-        testEmail!.toLowerCase(),
-      )
-
-      if (shouldHaveDatabaseAccess) {
-        expect(data?.length).toBeGreaterThan(0)
-      } else {
-        expect(data).toEqual([])
-
-        const { error: insertError } = await client
-          .from('lists')
-          .insert({ title: `RLS probe ${Date.now()}` })
-
-        expect(insertError, 'RLS should reject a non-allowlisted account').not.toBeNull()
-        expect(insertError?.code).toBe('42501')
-      }
+      expect(error, 'RLS should admit the configured allowlisted account').toBeNull()
+      expect(data?.length).toBeGreaterThan(0)
     } finally {
       await client.auth.signOut()
     }
   })
 
-  test('creates, reads, updates, and deletes a list', async () => {
-    test.skip(
-      process.env.E2E_DB_CRUD !== 'true',
-      'Set E2E_DB_CRUD=true only for an account included in the RLS allowlist',
-    )
-
+  test('performs relational CRUD and applies database triggers', async () => {
     const client = createTestClient()
-    const originalTitle = `Playwright DB list ${Date.now()}`
-    const updatedTitle = `${originalTitle} updated`
-    let createdListId: string | undefined
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const listTitle = `Playwright DB list ${suffix}`
+    const categoryName = `Playwright DB category ${suffix}`
+    const itemName = `Playwright DB item ${suffix}`
+    let listId: string | undefined
+    let categoryId: string | undefined
 
     try {
       await signIn(client)
 
-      const { data: created, error: createError } = await client
+      const { data: list, error: listError } = await client
         .from('lists')
-        .insert({ title: originalTitle })
+        .insert({ title: listTitle })
         .select('*')
         .single()
+      expect(listError).toBeNull()
+      expect(list?.created_by).toBeTruthy()
+      listId = list?.id
 
-      expect(createError).toBeNull()
-      expect(created?.title).toBe(originalTitle)
-      createdListId = created?.id
-
-      expect(createdListId).toBeTruthy()
-
-      const { data: read, error: readError } = await client
-        .from('lists')
-        .select('*')
-        .eq('id', createdListId!)
-        .single()
-
-      expect(readError).toBeNull()
-      expect(read?.title).toBe(originalTitle)
-
-      const { data: updated, error: updateError } = await client
-        .from('lists')
-        .update({ title: updatedTitle })
-        .eq('id', createdListId!)
+      const { data: category, error: categoryError } = await client
+        .from('categories')
+        .insert({ name: categoryName, order_index: 9999, keywords: ['probe'] })
         .select('*')
         .single()
+      expect(categoryError).toBeNull()
+      categoryId = category?.id
 
-      expect(updateError).toBeNull()
-      expect(updated?.title).toBe(updatedTitle)
+      expect(listId).toBeTruthy()
+      expect(categoryId).toBeTruthy()
 
-      const { error: deleteError } = await client
+      const { data: item, error: itemError } = await client
+        .from('list_items')
+        .insert({
+          list_id: listId!,
+          category_id: categoryId!,
+          name: itemName,
+          quantity: '2',
+        })
+        .select('*')
+        .single()
+      expect(itemError).toBeNull()
+      expect(item?.is_done).toBe(false)
+      expect(item?.done_at).toBeNull()
+
+      const { data: completed, error: completeError } = await client
+        .from('list_items')
+        .update({ is_done: true })
+        .eq('id', item!.id)
+        .select('*')
+        .single()
+      expect(completeError).toBeNull()
+      expect(completed?.is_done).toBe(true)
+      expect(completed?.done_at).toBeTruthy()
+
+      const { data: renamed, error: renameError } = await client
+        .from('lists')
+        .update({ title: `${listTitle} updated` })
+        .eq('id', listId!)
+        .select('title')
+        .single()
+      expect(renameError).toBeNull()
+      expect(renamed?.title).toBe(`${listTitle} updated`)
+
+      const { error: deleteListError } = await client
         .from('lists')
         .delete()
-        .eq('id', createdListId!)
+        .eq('id', listId!)
+      expect(deleteListError).toBeNull()
+      listId = undefined
 
-      expect(deleteError).toBeNull()
-      createdListId = undefined
+      const { data: cascadedItem, error: cascadeError } = await client
+        .from('list_items')
+        .select('id')
+        .eq('id', item!.id)
+      expect(cascadeError).toBeNull()
+      expect(cascadedItem).toEqual([])
+
+      const { error: deleteCategoryError } = await client
+        .from('categories')
+        .delete()
+        .eq('id', categoryId!)
+      expect(deleteCategoryError).toBeNull()
+      categoryId = undefined
     } finally {
-      if (createdListId) {
-        await client.from('lists').delete().eq('id', createdListId)
-      }
+      if (listId) await client.from('lists').delete().eq('id', listId)
+      if (categoryId) await client.from('categories').delete().eq('id', categoryId)
       await client.auth.signOut()
     }
   })

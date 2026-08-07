@@ -1,2 +1,1 @@
-// Category components will be exported from this module boundary.
-export {}
+export { CategoriesView, getCategoryEmoji } from './categories-view'

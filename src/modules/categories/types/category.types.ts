@@ -30,7 +30,7 @@ export type CategoryUpdate = {
 
 export type CreateCategoryInput = Pick<
   CategoryInsert,
-  'name' | 'order_index' | 'keywords'
+  'id' | 'name' | 'order_index' | 'keywords'
 >
 
 export type UpdateCategoryInput = Pick<

@@ -7,7 +7,7 @@ import './globals.css'
 const geist = Geist({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Nest — Shared Lists',
+  title: 'Nasza lista',
   description: 'A clean, shared grocery and todo list app for you and your people.',
   generator: 'v0.app',
   manifest: '/manifest.webmanifest',
