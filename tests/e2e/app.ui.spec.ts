@@ -265,7 +265,9 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     cleanupListTitles.delete(listTitle)
   })
 
-  test('creates, renames, searches, and deletes a category', async ({ page }) => {
+  test('creates, renames, searches, edits items, and deletes a category', async ({
+    page,
+  }) => {
     const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     const originalName = `Playwright category ${suffix}`
     const renamedName = `${originalName} renamed`
@@ -307,6 +309,30 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
       .toBe(true)
 
     await page.getByPlaceholder('Search categories or items').fill(categoryItem)
+    await expect(page.getByRole('heading', { name: renamedName })).toBeVisible()
+
+    await page.getByRole('button', { name: `Edit ${renamedName}` }).click()
+    await editDialog
+      .getByRole('button', { name: `Remove ${categoryItem} from category` })
+      .click()
+    await expect(editDialog.getByText(categoryItem, { exact: true })).toHaveCount(0)
+    await editDialog.getByRole('button', { name: 'Save changes' }).click()
+
+    await expect(editDialog).toHaveCount(0)
+    await expect
+      .poll(async () => {
+        const { data, error } = await client
+          .from('categories')
+          .select('keywords')
+          .eq('name', renamedName)
+          .single()
+        expect(error).toBeNull()
+        return data?.keywords.includes(categoryItem)
+      })
+      .toBe(false)
+    await expect(page.getByRole('heading', { name: renamedName })).toHaveCount(0)
+
+    await page.getByPlaceholder('Search categories or items').fill('')
     await expect(page.getByRole('heading', { name: renamedName })).toBeVisible()
 
     page.once('dialog', (dialog) => void dialog.accept())

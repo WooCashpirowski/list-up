@@ -39,6 +39,16 @@ export function CategoryEditModal({
     setNewKeyword('')
   }
 
+  function removeKeyword(keywordToRemove: string) {
+    const normalizedKeyword = keywordToRemove.trim().toLocaleLowerCase('pl')
+
+    setKeywords((current) =>
+      current.filter(
+        (keyword) => keyword.trim().toLocaleLowerCase('pl') !== normalizedKeyword,
+      ),
+    )
+  }
+
   async function save() {
     if (!name.trim() || isSaving) return
     setIsSaving(true)
@@ -139,9 +149,17 @@ export function CategoryEditModal({
               {keywords.map((keyword) => (
                 <span
                   key={keyword.toLocaleLowerCase('pl')}
-                  className="rounded-full bg-secondary px-3 py-1 text-xs font-medium"
+                  className="inline-flex items-center gap-1 rounded-full bg-secondary py-1 pl-3 pr-1 text-xs font-medium"
                 >
                   {keyword}
+                  <button
+                    type="button"
+                    onClick={() => removeKeyword(keyword)}
+                    aria-label={t('categories.removeItem', { name: keyword })}
+                    className="flex size-5 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <X className="size-3" strokeWidth={2.5} />
+                  </button>
                 </span>
               ))}
             </div>
