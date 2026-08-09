@@ -1,9 +1,11 @@
 'use client'
 
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getErrorMessage } from '@/src/lib/get-error-message'
 import { createClient } from '@/src/lib/supabase/client'
+import { applyRealtimeChange } from '@/src/lib/supabase/realtime-collection'
 import {
   executeOrQueueMutation,
   getCachedCollection,
@@ -70,7 +72,12 @@ export function useLists(userId: string) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'lists' },
-        () => void refresh(),
+        (payload: RealtimePostgresChangesPayload<List>) => {
+          setLists((current) => {
+            const next = applyRealtimeChange(current, payload)
+            return next === current ? current : sortLists(next)
+          })
+        },
       )
       .subscribe()
     const handleOutboxSynced = () => void refresh()
