@@ -4,6 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getErrorMessage } from '@/src/lib/get-error-message'
 import { createClient } from '@/src/lib/supabase/client'
+import {
+  executeOrQueueMutation,
+  getCachedCollection,
+  isBrowserOnline,
+  isNetworkFailure,
+  OUTBOX_SYNCED_EVENT,
+  saveCachedCollection,
+} from '@/src/modules/offline'
 
 import {
   clearListItems as clearListItemRecords,
@@ -28,20 +36,35 @@ export function useListItems(userId: string) {
   const [items, setItems] = useState<ListItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasHydratedCache, setHasHydratedCache] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
       setItems(await getAllListItems(supabase))
       setError(null)
     } catch (nextError) {
-      setError(getErrorMessage(nextError))
+      if (!isNetworkFailure(nextError)) setError(getErrorMessage(nextError))
     } finally {
       setIsLoading(false)
     }
   }, [supabase])
 
   useEffect(() => {
-    const initialRefresh = window.setTimeout(() => void refresh(), 0)
+    let active = true
+
+    void getCachedCollection<ListItem>(userId, 'list-items')
+      .then((cached) => {
+        if (active && cached) setItems(cached)
+      })
+      .catch((nextError) => {
+        if (active) setError(getErrorMessage(nextError))
+      })
+      .finally(() => {
+        if (!active) return
+        setHasHydratedCache(true)
+        if (isBrowserOnline()) void refresh()
+        else setIsLoading(false)
+      })
 
     const channel = supabase
       .channel(`list-items:${userId}`)
@@ -51,12 +74,22 @@ export function useListItems(userId: string) {
         () => void refresh(),
       )
       .subscribe()
+    const handleOutboxSynced = () => void refresh()
+    window.addEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
 
     return () => {
-      window.clearTimeout(initialRefresh)
+      active = false
+      window.removeEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
       void supabase.removeChannel(channel)
     }
   }, [refresh, supabase, userId])
+
+  useEffect(() => {
+    if (!hasHydratedCache) return
+    void saveCachedCollection(userId, 'list-items', items).catch((nextError) => {
+      setError(getErrorMessage(nextError))
+    })
+  }, [hasHydratedCache, items, userId])
 
   useEffect(() => {
     const completed = items
@@ -83,13 +116,19 @@ export function useListItems(userId: string) {
         current.filter((item) => !expiredIds.includes(item.id)),
       )
 
-      void Promise.allSettled(
-        expiredIds.map((id) => deleteListItemRecord(id, supabase)),
-      )
+      const mutations = expiredIds.map((id) => ({
+        userId,
+        table: 'list_items' as const,
+        operation: 'delete' as const,
+        recordId: id,
+      }))
+      void executeOrQueueMutation(mutations, () =>
+        Promise.all(expiredIds.map((id) => deleteListItemRecord(id, supabase))),
+      ).catch((nextError) => setError(getErrorMessage(nextError)))
     }, delay)
 
     return () => window.clearTimeout(timer)
-  }, [items, supabase])
+  }, [items, supabase, userId])
 
   const addItem = useCallback(
     async (input: AddListItemInput): Promise<boolean> => {
@@ -114,19 +153,28 @@ export function useListItems(userId: string) {
       setItems((current) => [...current, optimisticItem])
 
       try {
-        const created = await createListItemRecord(
+        const payload = {
+          id,
+          list_id: input.listId,
+          category_id: input.categoryId,
+          name: trimmedName,
+          quantity: input.quantity?.trim() || null,
+        }
+        const result = await executeOrQueueMutation(
           {
-            id,
-            list_id: input.listId,
-            category_id: input.categoryId,
-            name: trimmedName,
-            quantity: input.quantity?.trim() || null,
+            userId,
+            table: 'list_items',
+            operation: 'upsert',
+            recordId: id,
+            payload,
           },
-          supabase,
+          () => createListItemRecord(payload, supabase),
         )
-        setItems((current) =>
-          current.map((item) => (item.id === id ? created : item)),
-        )
+        if (result.status === 'synced') {
+          setItems((current) =>
+            current.map((item) => (item.id === id ? result.data : item)),
+          )
+        }
         setError(null)
         return true
       } catch (nextError) {
@@ -156,10 +204,21 @@ export function useListItems(userId: string) {
       )
 
       try {
-        const updated = await updateListItemRecord(id, { is_done: isDone }, supabase)
-        setItems((current) =>
-          current.map((item) => (item.id === id ? updated : item)),
+        const result = await executeOrQueueMutation(
+          {
+            userId,
+            table: 'list_items',
+            operation: 'update',
+            recordId: id,
+            payload: { is_done: isDone },
+          },
+          () => updateListItemRecord(id, { is_done: isDone }, supabase),
         )
+        if (result.status === 'synced') {
+          setItems((current) =>
+            current.map((item) => (item.id === id ? result.data : item)),
+          )
+        }
         setError(null)
       } catch (nextError) {
         setItems((current) =>
@@ -168,7 +227,7 @@ export function useListItems(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [items, supabase],
+    [items, supabase, userId],
   )
 
   const deleteItem = useCallback(
@@ -180,7 +239,15 @@ export function useListItems(userId: string) {
       setItems((current) => current.filter((item) => item.id !== id))
 
       try {
-        await deleteListItemRecord(id, supabase)
+        await executeOrQueueMutation(
+          {
+            userId,
+            table: 'list_items',
+            operation: 'delete',
+            recordId: id,
+          },
+          () => deleteListItemRecord(id, supabase),
+        )
         setError(null)
       } catch (nextError) {
         setItems((current) => {
@@ -191,7 +258,7 @@ export function useListItems(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [items, supabase],
+    [items, supabase, userId],
   )
 
   const clearItems = useCallback(
@@ -208,14 +275,22 @@ export function useListItems(userId: string) {
       )
 
       try {
-        await clearListItemRecords(listId, onlyDone, supabase)
+        const mutations = removed.map((item) => ({
+          userId,
+          table: 'list_items' as const,
+          operation: 'delete' as const,
+          recordId: item.id,
+        }))
+        await executeOrQueueMutation(mutations, () =>
+          clearListItemRecords(listId, onlyDone, supabase),
+        )
         setError(null)
       } catch (nextError) {
         setItems((current) => [...current, ...removed])
         setError(getErrorMessage(nextError))
       }
     },
-    [items, supabase],
+    [items, supabase, userId],
   )
 
   return {

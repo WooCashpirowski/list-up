@@ -10,6 +10,7 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --project=chromium",
     "test:e2e:db": "playwright test --config=playwright.db.config.ts",
+    "test:e2e:pwa": "npm run build && playwright test --config=playwright.pwa.config.ts",
     "test:e2e:headed": "playwright test --project=chromium --headed",
     "test:e2e:report": "playwright show-report"
   },

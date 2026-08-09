@@ -21,5 +21,11 @@ E2E_TEST_PASSWORD=replace-me
 npm run test:e2e
 npm run test:e2e:ui
 npm run test:e2e:db
+npm run test:e2e:pwa
 npm run test:e2e:headed
 ```
+
+The PWA suite builds and starts the production application, then verifies that
+the cached application shell can be reopened with the browser network disabled.
+It does not require Supabase credentials. Install the Playwright Chromium binary
+with `npx playwright install chromium` before running browser tests locally.

@@ -4,6 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getErrorMessage } from '@/src/lib/get-error-message'
 import { createClient } from '@/src/lib/supabase/client'
+import {
+  executeOrQueueMutation,
+  getCachedCollection,
+  isBrowserOnline,
+  isNetworkFailure,
+  OUTBOX_SYNCED_EVENT,
+  saveCachedCollection,
+} from '@/src/modules/offline'
 
 import {
   createCategory as createCategoryRecord,
@@ -24,20 +32,36 @@ export function useCategories(userId: string) {
   const [categories, setCategories] = useState<Category[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasHydratedCache, setHasHydratedCache] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
       setCategories(await getCategories(supabase))
       setError(null)
     } catch (nextError) {
-      setError(getErrorMessage(nextError))
+      if (!isNetworkFailure(nextError)) setError(getErrorMessage(nextError))
     } finally {
       setIsLoading(false)
     }
   }, [supabase])
 
   useEffect(() => {
-    const initialRefresh = window.setTimeout(() => void refresh(), 0)
+    let active = true
+
+    void getCachedCollection<Category>(userId, 'categories')
+      .then((cached) => {
+        if (!active) return
+        if (cached) setCategories(sortCategories(cached))
+      })
+      .catch((nextError) => {
+        if (active) setError(getErrorMessage(nextError))
+      })
+      .finally(() => {
+        if (!active) return
+        setHasHydratedCache(true)
+        if (isBrowserOnline()) void refresh()
+        else setIsLoading(false)
+      })
 
     const channel = supabase
       .channel(`categories:${userId}`)
@@ -47,12 +71,22 @@ export function useCategories(userId: string) {
         () => void refresh(),
       )
       .subscribe()
+    const handleOutboxSynced = () => void refresh()
+    window.addEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
 
     return () => {
-      window.clearTimeout(initialRefresh)
+      active = false
+      window.removeEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
       void supabase.removeChannel(channel)
     }
   }, [refresh, supabase, userId])
+
+  useEffect(() => {
+    if (!hasHydratedCache) return
+    void saveCachedCollection(userId, 'categories', categories).catch(
+      (nextError) => setError(getErrorMessage(nextError)),
+    )
+  }, [categories, hasHydratedCache, userId])
 
   const createCategory = useCallback(
     async (name: string): Promise<string | null> => {
@@ -74,20 +108,31 @@ export function useCategories(userId: string) {
       setCategories((current) => sortCategories([...current, optimisticCategory]))
 
       try {
-        const created = await createCategoryRecord(
+        const payload = {
+          id,
+          name: trimmedName,
+          order_index: categories.length,
+          keywords: [],
+        }
+        const result = await executeOrQueueMutation(
           {
-            id,
-            name: trimmedName,
-            order_index: categories.length,
-            keywords: [],
+            userId,
+            table: 'categories',
+            operation: 'upsert',
+            recordId: id,
+            payload,
           },
-          supabase,
+          () => createCategoryRecord(payload, supabase),
         )
-        setCategories((current) =>
-          sortCategories(
-            current.map((category) => (category.id === id ? created : category)),
-          ),
-        )
+        if (result.status === 'synced') {
+          setCategories((current) =>
+            sortCategories(
+              current.map((category) =>
+                category.id === id ? result.data : category,
+              ),
+            ),
+          )
+        }
         setError(null)
         return id
       } catch (nextError) {
@@ -115,12 +160,25 @@ export function useCategories(userId: string) {
       )
 
       try {
-        const updated = await updateCategoryRecord(id, input, supabase)
-        setCategories((current) =>
-          sortCategories(
-            current.map((category) => (category.id === id ? updated : category)),
-          ),
+        const result = await executeOrQueueMutation(
+          {
+            userId,
+            table: 'categories',
+            operation: 'update',
+            recordId: id,
+            payload: { ...input },
+          },
+          () => updateCategoryRecord(id, input, supabase),
         )
+        if (result.status === 'synced') {
+          setCategories((current) =>
+            sortCategories(
+              current.map((category) =>
+                category.id === id ? result.data : category,
+              ),
+            ),
+          )
+        }
         setError(null)
         return true
       } catch (nextError) {
@@ -133,7 +191,7 @@ export function useCategories(userId: string) {
         return false
       }
     },
-    [categories, supabase],
+    [categories, supabase, userId],
   )
 
   const saveCategory = useCallback(
@@ -161,14 +219,22 @@ export function useCategories(userId: string) {
       setCategories((current) => current.filter((category) => category.id !== id))
 
       try {
-        await deleteCategoryRecord(id, supabase)
+        await executeOrQueueMutation(
+          {
+            userId,
+            table: 'categories',
+            operation: 'delete',
+            recordId: id,
+          },
+          () => deleteCategoryRecord(id, supabase),
+        )
         setError(null)
       } catch (nextError) {
         setCategories((current) => sortCategories([...current, previous]))
         setError(getErrorMessage(nextError))
       }
     },
-    [categories, supabase],
+    [categories, supabase, userId],
   )
 
   return {

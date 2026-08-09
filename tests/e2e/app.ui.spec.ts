@@ -75,6 +75,24 @@ async function expectDatabaseCount(
     .toBe(expectedCount)
 }
 
+async function getOutboxCount(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      new Promise<number>((resolve, reject) => {
+        const request = indexedDB.open('list-up-offline', 1)
+        request.onerror = () => reject(request.error)
+        request.onsuccess = () => {
+          const database = request.result
+          const transaction = database.transaction('outbox', 'readonly')
+          const countRequest = transaction.objectStore('outbox').count()
+          countRequest.onerror = () => reject(countRequest.error)
+          countRequest.onsuccess = () => resolve(countRequest.result)
+          transaction.oncomplete = () => database.close()
+        }
+      }),
+  )
+}
+
 test.describe('Shared Grocery & Todo UI with Supabase', () => {
   test.describe.configure({ mode: 'serial' })
   test.skip(!hasTestConfig, 'Set Supabase and allowlisted E2E credentials')
@@ -216,6 +234,35 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await expectDatabaseCount(client, 'lists', renamedListTitle, 0)
     cleanupListTitles.delete(listTitle)
     cleanupListTitles.delete(renamedListTitle)
+  })
+
+  test('queues an offline mutation and synchronizes it after reconnecting', async ({
+    context,
+    page,
+  }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const listTitle = `Playwright offline list ${suffix}`
+    cleanupListTitles.add(listTitle)
+
+    await signInViaUi(page)
+    await context.setOffline(true)
+    await page.getByRole('button', { name: /Create New List/ }).click()
+    await page.getByLabel('Name your list').fill(listTitle)
+    await page.getByRole('button', { name: 'Create', exact: true }).click()
+
+    await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
+    await expect(page.getByRole('status').filter({ hasText: 'Offline' })).toBeVisible()
+    await expect.poll(() => getOutboxCount(page)).toBe(1)
+
+    await context.setOffline(false)
+    await expectDatabaseCount(client, 'lists', listTitle, 1)
+    await expect.poll(() => getOutboxCount(page)).toBe(0)
+
+    await page.getByRole('button', { name: 'Back to lists' }).click()
+    page.once('dialog', (dialog) => void dialog.accept())
+    await page.getByRole('button', { name: `Delete ${listTitle}` }).click()
+    await expectDatabaseCount(client, 'lists', listTitle, 0)
+    cleanupListTitles.delete(listTitle)
   })
 
   test('creates, renames, searches, and deletes a category', async ({ page }) => {

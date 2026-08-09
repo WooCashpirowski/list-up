@@ -6,6 +6,7 @@ loadPlaywrightEnv()
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100)
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${port}`
+const browserChannel = process.env.PLAYWRIGHT_CHANNEL
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -23,7 +24,7 @@ export default defineConfig({
     locale: 'en-US',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    video: process.env.PLAYWRIGHT_DISABLE_VIDEO ? 'off' : 'retain-on-failure',
   },
   projects: [
     {
@@ -31,6 +32,7 @@ export default defineConfig({
       testMatch: '**/*.ui.spec.ts',
       use: {
         ...devices['Desktop Chrome'],
+        ...(browserChannel ? { channel: browserChannel } : {}),
         viewport: { width: 390, height: 844 },
       },
     },

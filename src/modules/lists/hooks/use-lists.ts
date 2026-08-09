@@ -4,6 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getErrorMessage } from '@/src/lib/get-error-message'
 import { createClient } from '@/src/lib/supabase/client'
+import {
+  executeOrQueueMutation,
+  getCachedCollection,
+  isBrowserOnline,
+  isNetworkFailure,
+  OUTBOX_SYNCED_EVENT,
+  saveCachedCollection,
+} from '@/src/modules/offline'
 
 import {
   createList as createListRecord,
@@ -25,6 +33,7 @@ export function useLists(userId: string) {
   const [lists, setLists] = useState<List[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hasHydratedCache, setHasHydratedCache] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -32,14 +41,29 @@ export function useLists(userId: string) {
       setLists(records)
       setError(null)
     } catch (nextError) {
-      setError(getErrorMessage(nextError))
+      if (!isNetworkFailure(nextError)) setError(getErrorMessage(nextError))
     } finally {
       setIsLoading(false)
     }
   }, [supabase])
 
   useEffect(() => {
-    const initialRefresh = window.setTimeout(() => void refresh(), 0)
+    let active = true
+
+    void getCachedCollection<List>(userId, 'lists')
+      .then((cached) => {
+        if (!active) return
+        if (cached) setLists(sortLists(cached))
+      })
+      .catch((nextError) => {
+        if (active) setError(getErrorMessage(nextError))
+      })
+      .finally(() => {
+        if (!active) return
+        setHasHydratedCache(true)
+        if (isBrowserOnline()) void refresh()
+        else setIsLoading(false)
+      })
 
     const channel = supabase
       .channel(`lists:${userId}`)
@@ -49,12 +73,22 @@ export function useLists(userId: string) {
         () => void refresh(),
       )
       .subscribe()
+    const handleOutboxSynced = () => void refresh()
+    window.addEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
 
     return () => {
-      window.clearTimeout(initialRefresh)
+      active = false
+      window.removeEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
       void supabase.removeChannel(channel)
     }
   }, [refresh, supabase, userId])
+
+  useEffect(() => {
+    if (!hasHydratedCache) return
+    void saveCachedCollection(userId, 'lists', lists).catch((nextError) => {
+      setError(getErrorMessage(nextError))
+    })
+  }, [hasHydratedCache, lists, userId])
 
   const createList = useCallback(
     async (title: string): Promise<string | null> => {
@@ -74,10 +108,21 @@ export function useLists(userId: string) {
       setLists((current) => sortLists([optimisticList, ...current]))
 
       try {
-        const created = await createListRecord({ id, title: trimmedTitle }, supabase)
-        setLists((current) =>
-          sortLists(current.map((list) => (list.id === id ? created : list))),
+        const result = await executeOrQueueMutation(
+          {
+            userId,
+            table: 'lists',
+            operation: 'upsert',
+            recordId: id,
+            payload: { id, title: trimmedTitle },
+          },
+          () => createListRecord({ id, title: trimmedTitle }, supabase),
         )
+        if (result.status === 'synced') {
+          setLists((current) =>
+            sortLists(current.map((list) => (list.id === id ? result.data : list))),
+          )
+        }
         setError(null)
         return id
       } catch (nextError) {
@@ -107,10 +152,23 @@ export function useLists(userId: string) {
       )
 
       try {
-        const updated = await updateListRecord(id, { title: trimmedTitle }, supabase)
-        setLists((current) =>
-          sortLists(current.map((list) => (list.id === id ? updated : list))),
+        const result = await executeOrQueueMutation(
+          {
+            userId,
+            table: 'lists',
+            operation: 'update',
+            recordId: id,
+            payload: { title: trimmedTitle },
+          },
+          () => updateListRecord(id, { title: trimmedTitle }, supabase),
         )
+        if (result.status === 'synced') {
+          setLists((current) =>
+            sortLists(
+              current.map((list) => (list.id === id ? result.data : list)),
+            ),
+          )
+        }
         setError(null)
       } catch (nextError) {
         setLists((current) =>
@@ -119,7 +177,7 @@ export function useLists(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [lists, supabase],
+    [lists, supabase, userId],
   )
 
   const deleteList = useCallback(
@@ -130,14 +188,22 @@ export function useLists(userId: string) {
       setLists((current) => current.filter((list) => list.id !== id))
 
       try {
-        await deleteListRecord(id, supabase)
+        await executeOrQueueMutation(
+          {
+            userId,
+            table: 'lists',
+            operation: 'delete',
+            recordId: id,
+          },
+          () => deleteListRecord(id, supabase),
+        )
         setError(null)
       } catch (nextError) {
         setLists((current) => sortLists([previous, ...current]))
         setError(getErrorMessage(nextError))
       }
     },
-    [lists, supabase],
+    [lists, supabase, userId],
   )
 
   return {
