@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { memo, useMemo, useState } from 'react'
 
+import { cn } from '@/lib/utils'
 import { LanguageToggle, useI18n } from '@/src/modules/i18n'
 import { getCategoryEmoji } from '@/src/modules/categories/components/categories-view'
 import type { Category } from '@/src/modules/categories/types/category.types'
@@ -165,7 +166,10 @@ function SortableCategorySection({
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <h2 className="truncate text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            <span aria-hidden className="mr-1">
+            <span
+              aria-hidden
+              className="mr-1 inline-flex size-7 items-center justify-center rounded-lg bg-accent text-base"
+            >
               {group.emoji}
             </span>
             {group.name}
@@ -182,7 +186,7 @@ function SortableCategorySection({
       </div>
 
       {!collapsed && (
-        <ul className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+        <ul className="surface-card overflow-hidden rounded-3xl border border-border bg-card/95">
           {group.items.map((item, index) => (
             <ItemRow
               key={item.id}
@@ -320,15 +324,32 @@ export function ListView({
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col pb-32">
-      <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 backdrop-blur-xl">
+      <header
+        className={cn(
+          'sticky top-0 z-20 border-b bg-background/82 backdrop-blur-xl',
+          list.list_type === 'todo' ? 'border-todo/18' : 'border-shopping/18',
+        )}
+      >
         <div className="flex items-center gap-2 px-3 pb-3 pt-12">
           <button
             onClick={onBack}
             aria-label={t('list.back')}
-            className="flex size-10 shrink-0 items-center justify-center rounded-full text-primary active:scale-90"
+            className={cn(
+              'flex size-10 shrink-0 items-center justify-center rounded-full transition-colors active:scale-90',
+              list.list_type === 'todo'
+                ? 'text-todo hover:bg-todo-soft'
+                : 'text-shopping hover:bg-shopping-soft',
+            )}
           >
             <ChevronLeft className="size-6" strokeWidth={2.5} />
           </button>
+          <span
+            aria-hidden
+            className={cn(
+              'size-2.5 shrink-0 rounded-full shadow-[0_0_18px_currentColor]',
+              list.list_type === 'todo' ? 'bg-todo text-todo' : 'bg-shopping text-shopping',
+            )}
+          />
           <h1 className="min-w-0 flex-1 truncate text-xl font-semibold tracking-tight">
             {list.title}
           </h1>
@@ -336,7 +357,7 @@ export function ListView({
         </div>
 
         <div className="px-4 pb-3">
-          <div className="flex items-center gap-2 rounded-2xl border border-input bg-card p-1.5 shadow-sm">
+          <div className="surface-card flex items-center gap-2 rounded-2xl border border-input bg-card/92 p-1.5 focus-within:border-primary/40">
             {isTodo ? (
               <input
                 value={name}
@@ -372,7 +393,7 @@ export function ListView({
               onClick={() => void submit()}
               disabled={isSubmitting || !name.trim()}
               aria-label={isTodo ? t('list.addTodoItem') : t('list.addItem')}
-              className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground disabled:opacity-50"
+              className="primary-action flex size-10 shrink-0 items-center justify-center rounded-xl text-primary-foreground disabled:opacity-50"
             >
               <Plus className="size-5" strokeWidth={2.5} />
             </button>
@@ -411,7 +432,7 @@ export function ListView({
       <div className="flex flex-col gap-6 px-4 pt-5">
         {items.length === 0 && (
           <div className="mt-16 flex flex-col items-center text-center">
-            <span className="flex size-16 items-center justify-center rounded-3xl bg-secondary text-3xl">
+            <span className="flex size-16 items-center justify-center rounded-3xl bg-accent text-3xl text-accent-foreground">
               {isTodo ? <Check className="size-8" strokeWidth={2.5} /> : '🧺'}
             </span>
             <p className="mt-4 text-base font-semibold">{t('list.empty')}</p>
@@ -425,7 +446,7 @@ export function ListView({
 
         {isTodo ? (
           todoItems.length > 0 && (
-            <ul className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+            <ul className="surface-card overflow-hidden rounded-3xl border border-border bg-card/95">
               {todoItems.map((item, index) => (
                 <ItemRow
                   key={item.id}
@@ -463,7 +484,7 @@ export function ListView({
       </div>
 
       {items.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-md gap-2 border-t border-border/70 bg-background/85 px-4 pb-6 pt-3 backdrop-blur-xl">
+        <div className="surface-glass fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-md gap-2 border-t border-border/70 bg-background/82 px-4 pb-6 pt-3 backdrop-blur-xl">
           {completedCount > 0 && (
             <button
               onClick={() => void onClearItems(list.id, true)}
@@ -487,7 +508,7 @@ export function ListView({
 
       {!isTodo && pendingItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-4 sm:items-center">
-          <div role="dialog" aria-modal="true" aria-labelledby="category-dialog-title" className="w-full max-w-md rounded-3xl bg-card p-5 shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-labelledby="category-dialog-title" className="surface-glass w-full max-w-md rounded-3xl border border-border bg-card/95 p-5 backdrop-blur-xl">
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
                 <h2 id="category-dialog-title" className="text-xl font-semibold">
@@ -507,7 +528,7 @@ export function ListView({
                 <button
                   key={category.id}
                   onClick={() => void finishPending(() => onAssignPendingItem(category.id))}
-                  className="flex items-center gap-2 rounded-2xl bg-secondary px-3 py-3 text-left text-sm font-medium"
+                  className="flex items-center gap-2 rounded-2xl border border-transparent bg-secondary px-3 py-3 text-left text-sm font-medium transition-colors hover:border-primary/25 hover:bg-accent"
                 >
                   <span aria-hidden>{getCategoryEmoji(category.name)}</span>
                   <span className="truncate">{category.name}</span>

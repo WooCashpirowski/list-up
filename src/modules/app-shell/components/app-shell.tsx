@@ -46,7 +46,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const inList = tab === 'home' && openList !== null
 
   return (
-    <main className="min-h-dvh bg-background text-foreground">
+    <main className="app-canvas min-h-dvh text-foreground">
       {error && <DataErrorBanner message={error} />}
       <OfflineStatus state={offlineState} />
 

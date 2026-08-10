@@ -15,8 +15,11 @@
         margin: 0;
         display: grid;
         place-items: center;
-        background: #f7f9f6;
-        color: #24322d;
+        background:
+          radial-gradient(circle at 10% 0%, rgb(78 213 137 / 18%), transparent 42%),
+          radial-gradient(circle at 100% 0%, rgb(169 165 255 / 10%), transparent 38%),
+          #f4faf5;
+        color: #1d3028;
       }
       main {
         width: min(86vw, 360px);
@@ -40,11 +43,14 @@
       }
       @media (prefers-color-scheme: dark) {
         body {
-          background: #171c1a;
-          color: #f4f7f5;
+          background:
+            radial-gradient(circle at 10% 0%, rgb(78 213 137 / 16%), transparent 42%),
+            radial-gradient(circle at 100% 0%, rgb(169 165 255 / 12%), transparent 38%),
+            #08120d;
+          color: #ecf4ee;
         }
         p {
-          color: #aeb9b4;
+          color: #98aa9f;
         }
       }
     </style>

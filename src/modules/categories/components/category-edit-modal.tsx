@@ -80,7 +80,7 @@ export function CategoryEditModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="category-edit-title"
-        className="flex max-h-[85dvh] w-full max-w-md flex-col rounded-3xl bg-card p-5 shadow-2xl"
+        className="surface-glass flex max-h-[85dvh] w-full max-w-md flex-col rounded-3xl border border-border bg-card/95 p-5 backdrop-blur-xl"
       >
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
@@ -135,7 +135,7 @@ export function CategoryEditModal({
               onClick={addKeyword}
               disabled={!newKeyword.trim()}
               aria-label={t('categories.addItem')}
-              className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground disabled:opacity-50"
+              className="primary-action flex size-12 shrink-0 items-center justify-center rounded-2xl text-primary-foreground disabled:opacity-50"
             >
               <Plus className="size-5" />
             </button>
@@ -149,7 +149,7 @@ export function CategoryEditModal({
               {keywords.map((keyword) => (
                 <span
                   key={keyword.toLocaleLowerCase('pl')}
-                  className="inline-flex items-center gap-1 rounded-full bg-secondary py-1 pl-3 pr-1 text-xs font-medium"
+                  className="inline-flex items-center gap-1 rounded-full border border-border/70 bg-secondary/80 py-1 pl-3 pr-1 text-xs font-medium"
                 >
                   {keyword}
                   <button
@@ -182,7 +182,7 @@ export function CategoryEditModal({
             type="button"
             onClick={() => void save()}
             disabled={!name.trim() || isSaving}
-            className="flex-1 rounded-2xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+            className="primary-action flex-1 rounded-2xl py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
           >
             {isSaving ? t('categories.saving') : t('categories.saveChanges')}
           </button>

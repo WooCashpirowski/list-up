@@ -2,6 +2,7 @@
 
 import { Check, ShoppingBasket } from 'lucide-react'
 
+import { cn } from '@/lib/utils'
 import { useI18n } from '@/src/modules/i18n'
 
 import type { ListType } from '../types/list.types'
@@ -47,15 +48,19 @@ export function ListTypeSelector({
       <div className="grid grid-cols-2 gap-2">
         {options.map(({ value: optionValue, labelKey, descriptionKey, Icon }) => {
           const selected = value === optionValue
+          const isTodo = optionValue === 'todo'
 
           return (
             <label
               key={optionValue}
-              className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring ${
+              className={cn(
+                'flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-all has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
                 selected
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border bg-secondary text-muted-foreground'
-              }`}
+                  ? isTodo
+                    ? 'border-todo/35 bg-todo-soft text-foreground'
+                    : 'border-shopping/35 bg-shopping-soft text-foreground'
+                  : 'border-border bg-secondary/75 text-muted-foreground hover:border-primary/20 hover:bg-card',
+              )}
             >
               <input
                 type="radio"
@@ -66,11 +71,16 @@ export function ListTypeSelector({
                 className="sr-only"
               />
               <span
-                className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+                className={cn(
+                  'flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors',
                   selected
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background text-muted-foreground'
-                }`}
+                    ? isTodo
+                      ? 'bg-todo text-todo-foreground'
+                      : 'bg-shopping text-shopping-foreground'
+                    : isTodo
+                      ? 'bg-todo-soft text-todo'
+                      : 'bg-shopping-soft text-shopping',
+                )}
                 aria-hidden
               >
                 <Icon className="size-5" strokeWidth={2.5} />

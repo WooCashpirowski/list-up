@@ -22,12 +22,12 @@ export function ThemeToggle() {
       type="button"
       aria-label={isDark ? t('theme.switchToLight') : t('theme.switchToDark')}
       onClick={() => setTheme(isDark ? "light" : "dark")}
-      className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border bg-card text-foreground shadow-sm transition-transform active:scale-95"
+      className="surface-card flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border bg-card/90 transition-all hover:border-primary/25 hover:bg-accent/70 active:scale-95"
     >
       {mounted && isDark ? (
-        <Sun className="size-5" strokeWidth={2} />
+        <Sun className="size-5 text-warning" strokeWidth={2.2} />
       ) : (
-        <Moon className="size-5" strokeWidth={2} />
+        <Moon className="size-5 text-todo" strokeWidth={2.2} />
       )}
     </button>
   )

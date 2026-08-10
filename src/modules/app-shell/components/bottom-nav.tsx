@@ -2,6 +2,7 @@
 
 import { Home, Languages, LayoutGrid, LogOut } from 'lucide-react'
 
+import { cn } from '@/lib/utils'
 import { useI18n } from '@/src/modules/i18n'
 
 export type AppTab = 'home' | 'categories'
@@ -25,7 +26,7 @@ export function BottomNav({ active, onChange, onLogout }: BottomNavProps) {
       className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md"
       aria-label={t('nav.main')}
     >
-      <div className="mx-4 mb-4 flex items-center justify-around rounded-3xl border border-border bg-card/90 px-2 py-2 shadow-lg backdrop-blur-xl">
+      <div className="surface-glass mx-4 mb-4 flex items-center justify-around rounded-3xl border border-border bg-card/82 px-2 py-2 backdrop-blur-xl">
         {tabs.map((tab) => {
           const Icon = tab.icon
           const isActive = active === tab.id
@@ -35,9 +36,12 @@ export function BottomNav({ active, onChange, onLogout }: BottomNavProps) {
               key={tab.id}
               onClick={() => onChange(tab.id)}
               aria-current={isActive ? 'page' : undefined}
-              className={`flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-xs font-medium transition-colors ${
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              }`}
+              className={cn(
+                'flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-xs font-medium transition-all',
+                isActive
+                  ? 'bg-primary/12 text-primary shadow-[inset_0_1px_0_oklch(1_0_0/12%)]'
+                  : 'text-muted-foreground hover:bg-accent/45 hover:text-foreground',
+              )}
             >
               <Icon className="size-6" strokeWidth={isActive ? 2.4 : 2} />
               {tab.label}
@@ -51,14 +55,14 @@ export function BottomNav({ active, onChange, onLogout }: BottomNavProps) {
               ? 'language.switchToPolish'
               : 'language.switchToEnglish',
           )}
-          className="flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-xs font-medium uppercase text-muted-foreground transition-colors active:text-primary"
+          className="flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-xs font-medium uppercase text-muted-foreground transition-colors hover:bg-info-soft hover:text-info active:text-info"
         >
           <Languages className="size-6" strokeWidth={2} />
           {nextLocale}
         </button>
         <button
           onClick={onLogout}
-          className="flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-xs font-medium text-muted-foreground transition-colors active:text-destructive"
+          className="flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive-soft hover:text-destructive active:text-destructive"
         >
           <LogOut className="size-6" strokeWidth={2} />
           {t('nav.logout')}

@@ -19,9 +19,9 @@ export function LanguageToggle() {
       aria-label={label}
       title={label}
       onClick={() => setLocale(nextLocale)}
-      className="flex size-11 shrink-0 items-center justify-center gap-1 rounded-2xl border border-border bg-card text-xs font-bold uppercase text-foreground shadow-sm transition-transform active:scale-95"
+      className="surface-card flex size-11 shrink-0 items-center justify-center gap-1 rounded-2xl border border-border bg-card/90 text-xs font-bold uppercase text-foreground transition-all hover:border-info/25 hover:bg-info-soft active:scale-95"
     >
-      <Languages className="size-4" />
+      <Languages className="size-4 text-info" />
       {nextLocale}
     </button>
   )

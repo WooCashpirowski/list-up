@@ -13,6 +13,7 @@ import {
 import { useMemo, useState, useSyncExternalStore } from 'react'
 
 import { ThemeToggle } from '@/components/theme-toggle'
+import { cn } from '@/lib/utils'
 import { useI18n } from '@/src/modules/i18n'
 import type { ListItem } from '@/src/modules/list-items/types/list-item.types'
 
@@ -95,7 +96,7 @@ export function HomeView({
     <div className="mx-auto flex w-full max-w-md flex-col px-5 pb-28 pt-14">
       <header className="mb-7 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">{t('home.greeting')}</p>
+          <p className="text-sm font-semibold text-primary">{t('home.greeting')}</p>
           <h1 className="text-pretty text-3xl font-semibold tracking-tight text-foreground">
             {t('home.title')}
           </h1>
@@ -107,11 +108,17 @@ export function HomeView({
         {lists.map((list) => {
           const count = counts.get(list.id) ?? { total: 0, remaining: 0 }
           const isEditing = editingId === list.id
+          const isTodo = list.list_type === 'todo'
 
           return (
             <article
               key={list.id}
-              className="rounded-3xl border border-border bg-card p-3 shadow-sm"
+              className={cn(
+                'surface-card rounded-3xl border bg-card/95 p-3 transition-colors',
+                isTodo
+                  ? 'border-todo/18 hover:border-todo/35'
+                  : 'border-shopping/18 hover:border-shopping/35',
+              )}
             >
               <div className="flex items-center gap-2">
                 <button
@@ -125,7 +132,12 @@ export function HomeView({
                         ? t('home.typeTodo')
                         : t('home.typeShopping')
                     }
-                    className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground"
+                    className={cn(
+                      'flex size-12 shrink-0 items-center justify-center rounded-2xl transition-colors',
+                      isTodo
+                        ? 'bg-todo-soft text-todo'
+                        : 'bg-shopping-soft text-shopping',
+                    )}
                   >
                     {list.list_type === 'todo' ? (
                       <Check className="size-6" strokeWidth={2.5} />
@@ -227,7 +239,7 @@ export function HomeView({
 
       <div className="mt-4">
         {creating ? (
-          <div className="rounded-3xl border border-primary/30 bg-card p-4 shadow-sm">
+          <div className="surface-card rounded-3xl border border-primary/25 bg-card/95 p-4 backdrop-blur-sm">
             <label htmlFor="new-list" className="mb-2 block text-sm font-medium text-foreground">
               {t('home.listName')}
             </label>
@@ -265,7 +277,7 @@ export function HomeView({
               </button>
               <button
                 onClick={() => void submitCreate()}
-                className="flex-1 rounded-2xl bg-primary py-3 text-sm font-semibold text-primary-foreground"
+                className="primary-action flex-1 rounded-2xl py-3 text-sm font-semibold text-primary-foreground transition-transform active:scale-[0.98]"
               >
                 {t('common.create')}
               </button>
@@ -274,9 +286,9 @@ export function HomeView({
         ) : (
           <button
             onClick={() => setCreating(true)}
-            className="flex w-full items-center gap-4 rounded-3xl border-2 border-dashed border-border bg-transparent p-4 text-left active:scale-[0.98]"
+            className="flex w-full items-center gap-4 rounded-3xl border-2 border-dashed border-border bg-card/35 p-4 text-left transition-all hover:border-primary/35 hover:bg-primary/5 active:scale-[0.98]"
           >
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
+            <span className="brand-mark flex size-12 shrink-0 items-center justify-center rounded-2xl text-primary-foreground">
               <Plus className="size-6" strokeWidth={2.5} />
             </span>
             <span>

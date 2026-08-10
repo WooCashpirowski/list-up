@@ -42,7 +42,7 @@ export function LoginView({ onSignIn }: LoginViewProps) {
   }
 
   return (
-    <main className="min-h-dvh bg-background px-5 text-foreground">
+    <main className="app-canvas min-h-dvh px-5 text-foreground">
       <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col justify-center py-10">
         <div className="absolute right-5 top-5 flex gap-2">
           <LanguageToggle />
@@ -50,10 +50,10 @@ export function LoginView({ onSignIn }: LoginViewProps) {
         </div>
 
         <div className="mb-8">
-          <span className="mb-5 flex size-16 items-center justify-center rounded-3xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+          <span className="brand-mark mb-5 flex size-16 items-center justify-center rounded-3xl text-primary-foreground">
             <Sparkles className="size-7" strokeWidth={2.2} />
           </span>
-          <p className="text-sm font-medium text-muted-foreground">{t('auth.eyebrow')}</p>
+          <p className="text-sm font-semibold text-primary">{t('auth.eyebrow')}</p>
           <h1 className="mt-1 text-4xl font-semibold tracking-tight">{t('auth.title')}</h1>
           <p className="mt-3 max-w-sm text-sm leading-6 text-muted-foreground">
             {t('auth.description')}
@@ -62,7 +62,7 @@ export function LoginView({ onSignIn }: LoginViewProps) {
 
         <form
           onSubmit={submit}
-          className="rounded-3xl border border-border bg-card p-5 shadow-sm"
+          className="surface-card rounded-3xl border border-border bg-card/95 p-5 backdrop-blur-sm"
         >
           <label htmlFor="email" className="mb-2 block text-sm font-semibold">
             {t('auth.email')}
@@ -91,7 +91,7 @@ export function LoginView({ onSignIn }: LoginViewProps) {
           />
 
           {error && (
-            <p role="alert" className="mt-4 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            <p role="alert" className="mt-4 rounded-2xl border border-destructive/20 bg-destructive-soft px-4 py-3 text-sm text-destructive">
               {t(
                 error === 'invalidCredentials'
                   ? 'auth.invalidCredentials'
@@ -103,7 +103,7 @@ export function LoginView({ onSignIn }: LoginViewProps) {
           <button
             type="submit"
             disabled={isSubmitting || !email.trim() || !password}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-opacity active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+            className="primary-action mt-5 flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-sm font-semibold text-primary-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <LogIn className="size-4" />
             {isSubmitting ? t('auth.submitting') : t('auth.submit')}

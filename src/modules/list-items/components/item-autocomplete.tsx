@@ -97,7 +97,7 @@ export function ItemAutocomplete({
       />
 
       {isListboxVisible && (
-        <div className="absolute left-0 top-[calc(100%+0.65rem)] z-50 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-xl shadow-black/10">
+        <div className="surface-glass absolute left-0 top-[calc(100%+0.65rem)] z-50 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-border bg-popover/95 backdrop-blur-xl">
           <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Search className="size-3.5" />
             {t('list.suggestions', { count: suggestions.length })}
@@ -121,7 +121,7 @@ export function ItemAutocomplete({
                       isActive ? 'bg-accent text-accent-foreground' : 'text-foreground'
                     }`}
                   >
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-secondary text-base">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent text-base">
                       {getCategoryEmoji(suggestion.categoryName)}
                     </span>
                     <span className="min-w-0 flex-1">

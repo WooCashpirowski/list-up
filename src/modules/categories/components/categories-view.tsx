@@ -3,6 +3,7 @@
 import { Pencil, Plus, Search, Tags, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { cn } from '@/lib/utils'
 import { useI18n } from '@/src/modules/i18n'
 import type { ListItem } from '@/src/modules/list-items/types/list-item.types'
 
@@ -40,6 +41,34 @@ const categoryEmoji: Record<string, string> = {
   warzywa: '🥦',
   zioła: '🌿',
   zwierzęta: '🐾',
+}
+
+const categoryToneClassNames = {
+  produce: 'bg-shopping-soft text-shopping',
+  pantry: 'bg-warning-soft text-warning',
+  chilled: 'bg-info-soft text-info',
+  protein: 'bg-destructive-soft text-destructive',
+  home: 'bg-todo-soft text-todo',
+  neutral: 'bg-accent text-accent-foreground',
+} as const
+
+function getCategoryTone(name: string): keyof typeof categoryToneClassNames {
+  const normalized = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pl')
+
+  if (/owoce|warzywa|ziola/.test(normalized)) return 'produce'
+  if (/pieczywo|makarony|zbozowe|przekaski|przyprawy|konserwy|alkohol/.test(normalized)) {
+    return 'pantry'
+  }
+  if (/nabial|mrozonki|napoje/.test(normalized)) return 'chilled'
+  if (/mieso|wedliny|ryby/.test(normalized)) return 'protein'
+  if (/higiena|gosp|elektronika|odziez|obuwie|zwierzeta/.test(normalized)) {
+    return 'home'
+  }
+
+  return 'neutral'
 }
 
 export function getCategoryEmoji(name: string): string {
@@ -124,7 +153,7 @@ export function CategoriesView({
         </p>
       </header>
 
-      <div className="mb-5 flex items-center gap-2 rounded-2xl border border-input bg-card px-4 py-3 shadow-sm">
+      <div className="surface-card mb-5 flex items-center gap-2 rounded-2xl border border-input bg-card/90 px-4 py-3 backdrop-blur-sm focus-within:border-primary/45">
         <Search className="size-4 shrink-0 text-muted-foreground" />
         <input
           value={query}
@@ -141,7 +170,7 @@ export function CategoriesView({
 
       <div className="flex flex-col gap-3">
         {adding && (
-          <div className="rounded-3xl border border-primary/30 bg-card p-4 shadow-sm">
+          <div className="surface-card rounded-3xl border border-primary/25 bg-card/95 p-4">
             <label htmlFor="new-category" className="mb-2 block text-sm font-semibold">
               {t('categories.name')}
             </label>
@@ -169,7 +198,7 @@ export function CategoriesView({
               </button>
               <button
                 onClick={() => void submitCreate()}
-                className="flex-1 rounded-2xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground"
+                className="primary-action flex-1 rounded-2xl py-2.5 text-sm font-semibold text-primary-foreground"
               >
                 {t('common.add')}
               </button>
@@ -184,10 +213,15 @@ export function CategoriesView({
           return (
             <article
               key={category.id}
-              className="rounded-3xl border border-border bg-card p-4 shadow-sm"
+              className="surface-card rounded-3xl border border-border bg-card/95 p-4 transition-colors hover:border-primary/20"
             >
               <div className="flex items-center gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-accent text-lg">
+                <span
+                  className={cn(
+                    'flex size-10 shrink-0 items-center justify-center rounded-2xl text-lg',
+                    categoryToneClassNames[getCategoryTone(category.name)],
+                  )}
+                >
                   {getCategoryEmoji(category.name)}
                 </span>
                 <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
@@ -225,7 +259,7 @@ export function CategoriesView({
                   {categoryItems.map((name) => (
                     <span
                       key={name}
-                      className="rounded-full bg-secondary px-3 py-1 text-xs font-medium"
+                      className="rounded-full border border-border/70 bg-secondary/80 px-3 py-1 text-xs font-medium text-secondary-foreground"
                     >
                       {name}
                     </span>
@@ -251,7 +285,7 @@ export function CategoriesView({
       <button
         onClick={() => setAdding(true)}
         aria-label={t('categories.add')}
-        className="fixed bottom-24 right-5 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 active:scale-90"
+        className="primary-action fixed bottom-24 right-5 z-30 flex size-14 items-center justify-center rounded-full text-primary-foreground transition-transform active:scale-90"
       >
         <Plus className="size-6" strokeWidth={2.5} />
       </button>
