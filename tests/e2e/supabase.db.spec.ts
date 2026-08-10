@@ -92,7 +92,17 @@ test.describe('Supabase authenticated integration', () => {
         .single()
       expect(listError).toBeNull()
       expect(list?.created_by).toBeTruthy()
+      expect(list?.list_type).toBe('shopping')
       listId = list?.id
+
+      const { error: listTypeChangeError } = await client
+        .from('lists')
+        .update({ list_type: 'todo' })
+        .eq('id', listId!)
+      expect(
+        listTypeChangeError,
+        'A list type must be immutable after creation',
+      ).not.toBeNull()
 
       const { data: category, error: categoryError } = await client
         .from('categories')

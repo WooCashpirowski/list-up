@@ -21,13 +21,19 @@ import {
   getLists,
   updateList as updateListRecord,
 } from '../services/lists.service'
-import type { List } from '../types/list.types'
+import type { List, ListType } from '../types/list.types'
 
 function sortLists(lists: List[]): List[] {
-  return [...lists].sort(
+  return lists
+    .map((list) =>
+      list.list_type === 'shopping' || list.list_type === 'todo'
+        ? list
+        : { ...list, list_type: 'shopping' as const },
+    )
+    .sort(
     (left, right) =>
       new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
-  )
+    )
 }
 
 export function useLists(userId: string) {
@@ -40,7 +46,7 @@ export function useLists(userId: string) {
   const refresh = useCallback(async () => {
     try {
       const records = await getLists(supabase)
-      setLists(records)
+      setLists(sortLists(records))
       setError(null)
     } catch (nextError) {
       if (!isNetworkFailure(nextError)) setError(getErrorMessage(nextError))
@@ -98,7 +104,7 @@ export function useLists(userId: string) {
   }, [hasHydratedCache, lists, userId])
 
   const createList = useCallback(
-    async (title: string): Promise<string | null> => {
+    async (title: string, listType: ListType): Promise<string | null> => {
       const trimmedTitle = title.trim()
       if (!trimmedTitle) return null
 
@@ -107,6 +113,7 @@ export function useLists(userId: string) {
       const optimisticList: List = {
         id,
         title: trimmedTitle,
+        list_type: listType,
         created_by: userId,
         created_at: now,
         updated_at: now,
@@ -121,9 +128,13 @@ export function useLists(userId: string) {
             table: 'lists',
             operation: 'upsert',
             recordId: id,
-            payload: { id, title: trimmedTitle },
+            payload: { id, title: trimmedTitle, list_type: listType },
           },
-          () => createListRecord({ id, title: trimmedTitle }, supabase),
+          () =>
+            createListRecord(
+              { id, title: trimmedTitle, list_type: listType },
+              supabase,
+            ),
         )
         if (result.status === 'synced') {
           setLists((current) =>

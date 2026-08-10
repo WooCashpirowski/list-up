@@ -16,13 +16,14 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import { useI18n } from '@/src/modules/i18n'
 import type { ListItem } from '@/src/modules/list-items/types/list-item.types'
 
-import type { List } from '../types/list.types'
+import type { List, ListType } from '../types/list.types'
+import { ListTypeSelector } from './list-type-selector'
 
 type HomeViewProps = {
   lists: List[]
   items: ListItem[]
   onOpenList: (id: string) => void
-  onCreateList: (title: string) => Promise<string | null>
+  onCreateList: (title: string, listType: ListType) => Promise<string | null>
   onRenameList: (id: string, title: string) => Promise<void>
   onDeleteList: (id: string) => Promise<void>
 }
@@ -53,6 +54,7 @@ export function HomeView({
   const { locale, t } = useI18n()
   const [creating, setCreating] = useState(false)
   const [title, setTitle] = useState('')
+  const [listType, setListType] = useState<ListType>('shopping')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
   const mounted = useSyncExternalStore(
@@ -75,9 +77,10 @@ export function HomeView({
   }, [items])
 
   async function submitCreate() {
-    const id = await onCreateList(title)
+    const id = await onCreateList(title, listType)
     if (!id) return
     setTitle('')
+    setListType('shopping')
     setCreating(false)
     onOpenList(id)
   }
@@ -115,8 +118,20 @@ export function HomeView({
                   onClick={() => onOpenList(list.id)}
                   className="group flex min-w-0 flex-1 items-center gap-4 rounded-2xl p-1 text-left transition-all active:scale-[0.98]"
                 >
-                  <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
-                    <ShoppingBasket className="size-6" strokeWidth={2} />
+                  <span
+                    role="img"
+                    aria-label={
+                      list.list_type === 'todo'
+                        ? t('home.typeTodo')
+                        : t('home.typeShopping')
+                    }
+                    className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground"
+                  >
+                    {list.list_type === 'todo' ? (
+                      <Check className="size-6" strokeWidth={2.5} />
+                    ) : (
+                      <ShoppingBasket className="size-6" strokeWidth={2} />
+                    )}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-base font-semibold text-foreground">
@@ -226,16 +241,23 @@ export function HomeView({
                 if (event.key === 'Escape') {
                   setCreating(false)
                   setTitle('')
+                  setListType('shopping')
                 }
               }}
               placeholder={t('home.listPlaceholder')}
               className="w-full rounded-2xl border border-input bg-secondary px-4 py-3 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary"
+            />
+            <ListTypeSelector
+              name="new-list-type"
+              value={listType}
+              onChange={setListType}
             />
             <div className="mt-3 flex gap-2">
               <button
                 onClick={() => {
                   setCreating(false)
                   setTitle('')
+                  setListType('shopping')
                 }}
                 className="flex-1 rounded-2xl border border-border py-3 text-sm font-semibold text-foreground"
               >

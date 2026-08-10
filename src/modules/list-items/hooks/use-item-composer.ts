@@ -39,9 +39,18 @@ export function useItemComposer({
     async (
       name: string,
       quantity: string,
-      selectedCategoryId: string | 'auto',
+      selectedCategoryId: string | 'auto' | null,
     ): Promise<boolean> => {
       if (!listId || !name.trim()) return false
+
+      if (selectedCategoryId === null) {
+        return addItem({
+          listId,
+          categoryId: null,
+          name,
+          quantity: quantity.trim() || null,
+        })
+      }
 
       const category =
         selectedCategoryId === 'auto'

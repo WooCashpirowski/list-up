@@ -236,6 +236,57 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     cleanupListTitles.delete(renamedListTitle)
   })
 
+  test('creates a flat todo list with uncategorized items', async ({ page }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const listTitle = `Playwright todo list ${suffix}`
+    const itemName = `Playwright todo item ${suffix}`
+    cleanupListTitles.add(listTitle)
+
+    await signInViaUi(page)
+    await page.getByRole('button', { name: /Create New List/ }).click()
+    await page.getByLabel('Name your list').fill(listTitle)
+    await page.getByRole('radio', { name: /^Todo/ }).check()
+    await page.getByRole('button', { name: 'Create', exact: true }).click()
+
+    await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Auto', exact: true })).toHaveCount(0)
+
+    await page.getByRole('textbox', { name: 'Task name', exact: true }).fill(itemName)
+    await page.getByRole('button', { name: 'Add task' }).click()
+
+    await expect(page.getByText(itemName, { exact: true })).toBeVisible()
+    await expect(page.getByText('Other', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /^Move / })).toHaveCount(0)
+    await expect
+      .poll(async () => {
+        const { data, error } = await client
+          .from('list_items')
+          .select('category_id, lists!inner(title, list_type)')
+          .eq('name', itemName)
+          .eq('lists.title', listTitle)
+          .single()
+        expect(error).toBeNull()
+        return {
+          categoryId: data?.category_id,
+          listType: data?.lists.list_type,
+        }
+      })
+      .toEqual({ categoryId: null, listType: 'todo' })
+
+    await page.getByRole('button', { name: 'Back to lists' }).click()
+    const todoCard = page.locator('article').filter({ hasText: listTitle })
+    await expect(todoCard.getByRole('img', { name: 'Todo' })).toBeVisible()
+
+    await todoCard.getByRole('button', { name: `Rename ${listTitle}` }).click()
+    await expect(todoCard.getByRole('radio')).toHaveCount(0)
+    await todoCard.getByRole('button', { name: 'Cancel list rename' }).click()
+
+    page.once('dialog', (dialog) => void dialog.accept())
+    await todoCard.getByRole('button', { name: `Delete ${listTitle}` }).click()
+    await expectDatabaseCount(client, 'lists', listTitle, 0)
+    cleanupListTitles.delete(listTitle)
+  })
+
   test('queues an offline mutation and synchronizes it after reconnecting', async ({
     context,
     page,

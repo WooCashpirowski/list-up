@@ -13,7 +13,7 @@ Aplikacja PWA offline-ready / real-time do zarządzania listami zakupów i zadan
 ## Model Danych (Supabase)
 Wymagane tabele:
 1. `profiles`: (id, email) - powiązane z Supabase Auth. RLS dopuszcza tylko dwa konkretne maile.
-2. `lists`: (id, title, created_at, updated_at)
+2. `lists`: (id, title, list_type: `shopping | todo`, created_at, updated_at)
 3. `categories`: (id, name, order_index)
 4. `list_items`: (id, list_id, category_id, name, quantity, is_done, done_at)
 
@@ -26,8 +26,10 @@ Wymagane tabele:
 ### 2. Widok Główny (Moje Listy)
 - Pobieranie list z Supabase (sortowanie po `updated_at` malejąco).
 - CRUD na kartach list (tworzenie, edycja tytułu, usuwanie).
+- Typ listy wybierany wyłącznie podczas tworzenia: zakupy lub todo.
 
 ### 3. Widok Listy (Krytyczny pod kątem UX)
+- **Tryb listy:** Lista zakupowa korzysta z kategorii; lista todo jest płaską checklistą bez kategorii i Drag & Drop.
 - **Kategorie:** Zwijane/rozwijane (stan UI only).
 - **Elementy:** Dodawanie za pomocą formularza (Optimistic UI - element natychmiast ląduje na liście). Jeśli element nie znajduje się w żadnej kategorii, triggerujemy modal umożliwiający dodanie nowego elementu do kategorii -> dodanie zapisuje w bazie; jeśli element nie zostanie dodany -? zapisujemy w domyślnej kategorii Inne (nie synchronizuje się z bazą)
 - **Drag & Drop:** Użytkownik może ręcznie sortować kolejność kategorii w ramach listy (stan UI tylko lokalny na czas zakupów, nie musi być synchronizowany z DB, lub zapisywany z debouncem).

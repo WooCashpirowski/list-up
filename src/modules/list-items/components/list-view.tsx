@@ -56,7 +56,7 @@ type ListViewProps = {
   onSubmitItem: (
     name: string,
     quantity: string,
-    categoryId: string | 'auto',
+    categoryId: string | 'auto' | null,
   ) => Promise<boolean>
   onAssignPendingItem: (categoryId: string) => Promise<boolean>
   onKeepPendingItemUncategorized: () => Promise<boolean>
@@ -220,6 +220,7 @@ export function ListView({
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const sensors = useSensors(useSensor(PointerSensor), useSensor(TouchSensor))
+  const isTodo = list.list_type === 'todo'
 
   const allCategoryIds = useMemo(
     () => [...categories.map(({ id }) => id), UNCATEGORIZED_ID],
@@ -264,12 +265,24 @@ export function ListView({
       .filter((group): group is CategoryGroup => group !== null)
   }, [categories, effectiveCategoryOrder, items, t])
 
+  const todoItems = useMemo(
+    () =>
+      [...items].sort((left, right) =>
+        left.is_done === right.is_done ? 0 : left.is_done ? 1 : -1,
+      ),
+    [items],
+  )
+
   const completedCount = items.filter((item) => item.is_done).length
 
   async function submit() {
     if (!name.trim() || isSubmitting) return
     setIsSubmitting(true)
-    const created = await onSubmitItem(name, quantity, selectedCategory)
+    const created = await onSubmitItem(
+      name,
+      quantity,
+      isTodo ? null : selectedCategory,
+    )
     if (created) {
       setName('')
       setQuantity('')
@@ -324,13 +337,28 @@ export function ListView({
 
         <div className="px-4 pb-3">
           <div className="flex items-center gap-2 rounded-2xl border border-input bg-card p-1.5 shadow-sm">
-            <ItemAutocomplete
-              categories={categories}
-              value={name}
-              onChange={setName}
-              onSelect={(suggestion) => setSelectedCategory(suggestion.categoryId)}
-              onSubmit={() => void submit()}
-            />
+            {isTodo ? (
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void submit()
+                }}
+                aria-label={t('list.todoItemName')}
+                placeholder={t('list.addTodoPlaceholder')}
+                className="min-w-0 flex-1 bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
+              />
+            ) : (
+              <ItemAutocomplete
+                categories={categories}
+                value={name}
+                onChange={setName}
+                onSelect={(suggestion) =>
+                  setSelectedCategory(suggestion.categoryId)
+                }
+                onSubmit={() => void submit()}
+              />
+            )}
             <input
               value={quantity}
               onChange={(event) => setQuantity(event.target.value)}
@@ -343,70 +371,95 @@ export function ListView({
             <button
               onClick={() => void submit()}
               disabled={isSubmitting || !name.trim()}
-              aria-label={t('list.addItem')}
+              aria-label={isTodo ? t('list.addTodoItem') : t('list.addItem')}
               className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground disabled:opacity-50"
             >
               <Plus className="size-5" strokeWidth={2.5} />
             </button>
           </div>
-          <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
-            <button
-              onClick={() => setSelectedCategory('auto')}
-              className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${
-                selectedCategory === 'auto'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary text-muted-foreground'
-              }`}
-            >
-              <Sparkles className="size-3" /> {t('list.autoCategory')}
-            </button>
-            {categories.map((category) => (
+          {!isTodo && (
+            <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
               <button
-                key={category.id}
-                onClick={() => setSelectedCategory(category.id)}
+                onClick={() => setSelectedCategory('auto')}
                 className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${
-                  selectedCategory === category.id
+                  selectedCategory === 'auto'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-secondary text-muted-foreground'
                 }`}
               >
-                <span aria-hidden>{getCategoryEmoji(category.name)}</span> {category.name}
+                <Sparkles className="size-3" /> {t('list.autoCategory')}
               </button>
-            ))}
-          </div>
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id)}
+                  className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${
+                    selectedCategory === category.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-muted-foreground'
+                  }`}
+                >
+                  <span aria-hidden>{getCategoryEmoji(category.name)}</span>{' '}
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
       <div className="flex flex-col gap-6 px-4 pt-5">
-        {groups.length === 0 && (
+        {items.length === 0 && (
           <div className="mt-16 flex flex-col items-center text-center">
             <span className="flex size-16 items-center justify-center rounded-3xl bg-secondary text-3xl">
-              🧺
+              {isTodo ? <Check className="size-8" strokeWidth={2.5} /> : '🧺'}
             </span>
             <p className="mt-4 text-base font-semibold">{t('list.empty')}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {t('list.emptyDescription')}
+              {isTodo
+                ? t('list.emptyTodoDescription')
+                : t('list.emptyDescription')}
             </p>
           </div>
         )}
 
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext
-            items={groups.map(({ id }) => id)}
-            strategy={verticalListSortingStrategy}
+        {isTodo ? (
+          todoItems.length > 0 && (
+            <ul className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+              {todoItems.map((item, index) => (
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  onToggle={onToggleItem}
+                  onDelete={onDeleteItem}
+                />
+              ))}
+            </ul>
+          )
+        ) : (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            {groups.map((group) => (
-              <SortableCategorySection
-                key={group.id}
-                group={group}
-                collapsed={collapsed.has(group.id)}
-                onToggleCollapsed={toggleCollapsed}
-                onToggleItem={onToggleItem}
-                onDeleteItem={onDeleteItem}
-              />
-            ))}
-          </SortableContext>
-        </DndContext>
+            <SortableContext
+              items={groups.map(({ id }) => id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {groups.map((group) => (
+                <SortableCategorySection
+                  key={group.id}
+                  group={group}
+                  collapsed={collapsed.has(group.id)}
+                  onToggleCollapsed={toggleCollapsed}
+                  onToggleItem={onToggleItem}
+                  onDeleteItem={onDeleteItem}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        )}
       </div>
 
       {items.length > 0 && (
@@ -432,7 +485,7 @@ export function ListView({
         </div>
       )}
 
-      {pendingItem && (
+      {!isTodo && pendingItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-4 sm:items-center">
           <div role="dialog" aria-modal="true" aria-labelledby="category-dialog-title" className="w-full max-w-md rounded-3xl bg-card p-5 shadow-2xl">
             <div className="flex items-start gap-3">
