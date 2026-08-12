@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { memo, useMemo, useState } from 'react'
 
+import { ThemeToggle } from '@/components/theme-toggle'
 import { cn } from '@/lib/utils'
 import { LanguageToggle, useI18n } from '@/src/modules/i18n'
 import { getCategoryEmoji } from '@/src/modules/categories/components/categories-view'
@@ -354,6 +355,7 @@ export function ListView({
             {list.title}
           </h1>
           <LanguageToggle />
+          <ThemeToggle />
         </div>
 
         <div className="px-4 pb-3">

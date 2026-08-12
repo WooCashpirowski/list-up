@@ -1,7 +1,7 @@
 'use client'
 
 import { Plus, X } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { useI18n } from '@/src/modules/i18n'
 
@@ -11,6 +11,26 @@ type CategoryEditModalProps = {
   category: Category
   onClose: () => void
   onSave: (id: string, name: string, keywords: string[]) => Promise<boolean>
+}
+
+function normalizeKeywords(keywords: string[]): string[] {
+  return Array.from(
+    new Set(
+      keywords
+        .map((keyword) => keyword.trim().toLocaleLowerCase('pl'))
+        .filter(Boolean),
+    ),
+  ).sort((left, right) => left.localeCompare(right, 'pl'))
+}
+
+function haveSameKeywords(left: string[], right: string[]): boolean {
+  const normalizedLeft = normalizeKeywords(left)
+  const normalizedRight = normalizeKeywords(right)
+
+  return (
+    normalizedLeft.length === normalizedRight.length &&
+    normalizedLeft.every((keyword, index) => keyword === normalizedRight[index])
+  )
 }
 
 export function CategoryEditModal({
@@ -24,13 +44,33 @@ export function CategoryEditModal({
   const [newKeyword, setNewKeyword] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
+  const hasChanges =
+    name.trim() !== category.name.trim() ||
+    !haveSameKeywords(keywords, category.keywords)
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    const previousPaddingRight = document.body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+
+    document.body.style.overflow = 'hidden'
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.body.style.paddingRight = previousPaddingRight
+    }
+  }, [])
+
   function addKeyword() {
     const trimmedKeyword = newKeyword.trim()
     if (!trimmedKeyword) return
 
     const normalizedKeyword = trimmedKeyword.toLocaleLowerCase('pl')
     const alreadyExists = keywords.some(
-      (keyword) => keyword.toLocaleLowerCase('pl') === normalizedKeyword,
+      (keyword) => keyword.trim().toLocaleLowerCase('pl') === normalizedKeyword,
     )
 
     if (!alreadyExists) {
@@ -50,21 +90,10 @@ export function CategoryEditModal({
   }
 
   async function save() {
-    if (!name.trim() || isSaving) return
+    if (!name.trim() || !hasChanges || isSaving) return
     setIsSaving(true)
 
-    const pendingKeyword = newKeyword.trim()
-    const normalizedPendingKeyword = pendingKeyword.toLocaleLowerCase('pl')
-    const pendingKeywordExists = keywords.some(
-      (keyword) =>
-        keyword.trim().toLocaleLowerCase('pl') === normalizedPendingKeyword,
-    )
-    const keywordsToSave =
-      pendingKeyword && !pendingKeywordExists
-        ? [...keywords, pendingKeyword]
-        : keywords
-
-    const saved = await onSave(category.id, name, keywordsToSave)
+    const saved = await onSave(category.id, name, keywords)
     setIsSaving(false)
     if (saved) onClose()
   }
@@ -181,7 +210,7 @@ export function CategoryEditModal({
           <button
             type="button"
             onClick={() => void save()}
-            disabled={!name.trim() || isSaving}
+            disabled={!name.trim() || !hasChanges || isSaving}
             className="primary-action flex-1 rounded-2xl py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
           >
             {isSaving ? t('categories.saving') : t('categories.saveChanges')}

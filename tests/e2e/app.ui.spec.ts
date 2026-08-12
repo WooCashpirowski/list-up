@@ -244,6 +244,14 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
 
     await signInViaUi(page)
     await page.getByRole('button', { name: /Create New List/ }).click()
+    await expect
+      .poll(() =>
+        page.getByTestId('create-list-widget').evaluate((widget) => {
+          const bounds = widget.getBoundingClientRect()
+          return bounds.top >= 0 && bounds.bottom <= window.innerHeight
+        }),
+      )
+      .toBe(true)
     await page.getByLabel('Name your list').fill(listTitle)
     await page.getByRole('radio', { name: /^Todo/ }).check()
     await page.getByRole('button', { name: 'Create', exact: true }).click()
@@ -337,14 +345,33 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
 
     await page.getByRole('button', { name: `Edit ${originalName}` }).click()
     const editDialog = page.getByRole('dialog', { name: 'Edit category' })
+    const saveCategoryButton = editDialog.getByRole('button', {
+      name: 'Save changes',
+    })
+    const categoryNameInput = editDialog.getByLabel('Category name')
+    const categoryItemInput = editDialog.getByPlaceholder('e.g. avocado')
+    const addCategoryItemButton = editDialog.getByRole('button', {
+      name: 'Add category item',
+    })
     await expect(editDialog).toBeVisible()
-    await editDialog.getByLabel('Category name').fill(renamedName)
-    await editDialog.getByPlaceholder('e.g. avocado').fill(categoryItem)
-    // Saving directly must also include the value currently typed in the
-    // item input; clicking the separate plus button is optional.
-    await editDialog.getByRole('button', { name: 'Save changes' }).click()
+    await expect(page.locator('body')).toHaveCSS('overflow', 'hidden')
+    await expect(saveCategoryButton).toBeDisabled()
+
+    await categoryNameInput.fill(renamedName)
+    await expect(saveCategoryButton).toBeEnabled()
+    await categoryNameInput.fill(originalName)
+    await expect(saveCategoryButton).toBeDisabled()
+
+    await categoryItemInput.fill(categoryItem)
+    await expect(saveCategoryButton).toBeDisabled()
+    await addCategoryItemButton.click()
+    await expect(saveCategoryButton).toBeEnabled()
+
+    await categoryNameInput.fill(renamedName)
+    await saveCategoryButton.click()
 
     await expect(editDialog).toHaveCount(0)
+    await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
     await expect(page.getByRole('heading', { name: renamedName })).toBeVisible()
     await expectDatabaseCount(client, 'categories', renamedName, 1)
     await expect
@@ -363,13 +390,27 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await expect(page.getByRole('heading', { name: renamedName })).toBeVisible()
 
     await page.getByRole('button', { name: `Edit ${renamedName}` }).click()
+    await expect(saveCategoryButton).toBeDisabled()
     await editDialog
       .getByRole('button', { name: `Remove ${categoryItem} from category` })
       .click()
+    await expect(saveCategoryButton).toBeEnabled()
     await expect(editDialog.getByText(categoryItem, { exact: true })).toHaveCount(0)
-    await editDialog.getByRole('button', { name: 'Save changes' }).click()
+
+    await categoryItemInput.fill(categoryItem)
+    await expect(saveCategoryButton).toBeEnabled()
+    await addCategoryItemButton.click()
+    await expect(saveCategoryButton).toBeDisabled()
+    await expect(editDialog.getByText(categoryItem, { exact: true })).toBeVisible()
+
+    await editDialog
+      .getByRole('button', { name: `Remove ${categoryItem} from category` })
+      .click()
+    await expect(saveCategoryButton).toBeEnabled()
+    await saveCategoryButton.click()
 
     await expect(editDialog).toHaveCount(0)
+    await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
     await expect
       .poll(async () => {
         const { data, error } = await client

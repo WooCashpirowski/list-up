@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, Languages, LayoutGrid, LogOut } from 'lucide-react'
+import { Home, LayoutGrid, LogOut } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/src/modules/i18n'
@@ -14,8 +14,7 @@ type BottomNavProps = {
 }
 
 export function BottomNav({ active, onChange, onLogout }: BottomNavProps) {
-  const { locale, setLocale, t } = useI18n()
-  const nextLocale = locale === 'en' ? 'pl' : 'en'
+  const { t } = useI18n()
   const tabs: { id: AppTab; label: string; icon: typeof Home }[] = [
     { id: 'home', label: t('nav.home'), icon: Home },
     { id: 'categories', label: t('nav.categories'), icon: LayoutGrid },
@@ -48,18 +47,6 @@ export function BottomNav({ active, onChange, onLogout }: BottomNavProps) {
             </button>
           )
         })}
-        <button
-          onClick={() => setLocale(nextLocale)}
-          aria-label={t(
-            nextLocale === 'pl'
-              ? 'language.switchToPolish'
-              : 'language.switchToEnglish',
-          )}
-          className="flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-xs font-medium uppercase text-muted-foreground transition-colors hover:bg-info-soft hover:text-info active:text-info"
-        >
-          <Languages className="size-6" strokeWidth={2} />
-          {nextLocale}
-        </button>
         <button
           onClick={onLogout}
           className="flex flex-1 flex-col items-center gap-0.5 rounded-2xl py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-destructive-soft hover:text-destructive active:text-destructive"

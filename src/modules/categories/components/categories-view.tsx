@@ -3,8 +3,9 @@
 import { Pencil, Plus, Search, Tags, Trash2, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { ThemeToggle } from '@/components/theme-toggle'
 import { cn } from '@/lib/utils'
-import { useI18n } from '@/src/modules/i18n'
+import { LanguageToggle, useI18n } from '@/src/modules/i18n'
 import type { ListItem } from '@/src/modules/list-items/types/list-item.types'
 
 import type { Category } from '../types/category.types'
@@ -144,13 +145,19 @@ export function CategoriesView({
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col px-5 pb-28 pt-14">
-      <header className="mb-5">
-        <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-          {t('categories.title')}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('categories.description')}
-        </p>
+      <header className="mb-5 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+            {t('categories.title')}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t('categories.description')}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <LanguageToggle />
+          <ThemeToggle />
+        </div>
       </header>
 
       <div className="surface-card mb-5 flex items-center gap-2 rounded-2xl border border-input bg-card/90 px-4 py-3 backdrop-blur-sm focus-within:border-primary/45">
