@@ -1,7 +1,7 @@
 export {
   CategoriesView,
-  getCategoryEmoji,
 } from './components/categories-view'
+export { getCategoryEmoji } from './model/category-appearance'
 export { useCategories } from './hooks/use-categories'
 export { findCategoryForItem } from './services/category-matcher'
 export type {

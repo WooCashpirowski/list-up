@@ -13,7 +13,6 @@ import {
 import {
     useCallback,
     useEffect,
-    useMemo,
     useRef,
     useState,
     useSyncExternalStore,
@@ -23,34 +22,21 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { SwipeToDelete } from '@/components/ui/swipe-to-delete';
 import { cn } from '@/lib/utils';
 import { LanguageToggle, useI18n } from '@/src/modules/i18n';
-import type { ListItem } from '@/src/modules/list-items';
 
+import { useListProgress } from '../hooks/use-list-progress';
+import { formatRelativeListTime } from '../model/list-progress';
+import type { ListProgressItem } from '../types/list-progress.types';
 import type { List, ListType } from '../types/list.types';
 import { ListTypeSelector } from './list-type-selector';
 
 type HomeViewProps = {
     lists: List[];
-    items: ListItem[];
+    items: ListProgressItem[];
     onOpenList: (id: string) => void;
     onCreateList: (title: string, listType: ListType) => Promise<string | null>;
     onRenameList: (id: string, title: string) => Promise<void>;
     onDeleteList: (id: string) => Promise<void>;
 };
-
-function timeAgo(timestamp: string, locale: 'en' | 'pl'): string {
-    const difference = Date.now() - new Date(timestamp).getTime();
-    const minutes = Math.round(difference / 60_000);
-    const formatter = new Intl.RelativeTimeFormat(locale, {
-        numeric: 'auto',
-        style: 'narrow',
-    });
-
-    if (minutes < 1) return formatter.format(0, 'minute');
-    if (minutes < 60) return formatter.format(-minutes, 'minute');
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return formatter.format(-hours, 'hour');
-    return formatter.format(-Math.round(hours / 24), 'day');
-}
 
 export function HomeView({
     lists,
@@ -86,21 +72,7 @@ export function HomeView({
         return () => window.cancelAnimationFrame(animationFrame);
     }, [creating]);
 
-    const counts = useMemo(() => {
-        const result = new Map<string, { total: number; remaining: number }>();
-
-        for (const item of items) {
-            const current = result.get(item.list_id) ?? {
-                total: 0,
-                remaining: 0,
-            };
-            current.total += 1;
-            if (!item.is_done) current.remaining += 1;
-            result.set(item.list_id, current);
-        }
-
-        return result;
-    }, [items]);
+    const counts = useListProgress(items);
 
     async function submitCreate() {
         const id = await onCreateList(title, listType);
@@ -221,7 +193,7 @@ export function HomeView({
                                                             ? t(
                                                                   'home.emptyUpdated',
                                                                   {
-                                                                      time: timeAgo(
+                                                                      time: formatRelativeListTime(
                                                                           list.updated_at,
                                                                           locale,
                                                                       ),
@@ -235,7 +207,7 @@ export function HomeView({
                                                                     remaining:
                                                                         count.remaining,
                                                                     total: count.total,
-                                                                    time: timeAgo(
+                                                                    time: formatRelativeListTime(
                                                                         list.updated_at,
                                                                         locale,
                                                                     ),

@@ -16,7 +16,7 @@ Aplikacja działa w modelu offline-ready: po wcześniejszym uruchomieniu online 
 - Service Worker i Web App Manifest dla PWA
 - dnd-kit do obsługi Drag & Drop
 - next-themes do obsługi motywu
-- Playwright do testów E2E interfejsu, PWA i bazy danych
+- Playwright do testów jednostkowych modeli oraz testów E2E interfejsu, PWA i bazy danych
 
 ## 3. Architektura aplikacji
 
@@ -31,9 +31,9 @@ Kod jest podzielony domenowo w katalogu `src/modules`. Główne moduły to:
 - `i18n` — polska i angielska wersja interfejsu;
 - `profiles` — model profilu użytkownika.
 
-Każda domena może zawierać warstwy `components`, `hooks`, `services` i `types`. Komponenty odpowiadają za prezentację, hooki za stan i logikę biznesową, a serwisy za integrację z Supabase lub pamięcią lokalną.
+Każda domena może zawierać warstwy `components`, `hooks`, `model`, `services` i `types`. Komponenty odpowiadają za prezentację i obsługę interakcji, `model` zawiera czyste, niezależne od Reacta transformacje danych, hooki zarządzają stanem i memoizują modele pochodne, a serwisy odpowiadają za integrację z Supabase lub pamięcią lokalną. Grupowanie elementów list, kolejność pozycji wykonanych, katalog i filtrowanie kategorii oraz postęp list są wyliczane w warstwie `model`, poza komponentami widoków.
 
-Granice modułów są wyrażone przez publiczne API w pliku `src/modules/<moduł>/index.ts`. Kod spoza modułu importuje wyłącznie z tego pliku, bez odwołań do jego wewnętrznych katalogów. Publiczne API korzysta z jawnych eksportów; elementy niewyeksportowane z głównego `index.ts` są szczegółami implementacyjnymi. Kod wewnątrz modułu używa importów względnych do własnych warstw.
+Granice modułów są wyrażone przez publiczne API w pliku `src/modules/<moduł>/index.ts`. Kod spoza modułu importuje wyłącznie z tego pliku, bez odwołań do jego wewnętrznych katalogów. Publiczne API korzysta z jawnych eksportów; elementy niewyeksportowane z głównego `index.ts` są szczegółami implementacyjnymi. Kod wewnątrz modułu używa importów względnych do własnych warstw. Komponenty widoków przyjmują należące do konsumenta, minimalne kontrakty danych zamiast zależeć od pełnych typów encji sąsiedniej domeny.
 
 Warstwa współdzielona `src/lib` nie zależy od modułów domenowych. W szczególności `src/lib/supabase/database.types.ts` jest samodzielnym kontraktem schematu persistence. Typy rekordów bazy oraz typy domenowe są rozdzielone, a konwersja reprezentacji, które nie są równoważne, odbywa się w mapperach należących do serwisów odpowiedniego modułu. Pozwala to zmieniać reprezentację Supabase bez odwracania kierunku zależności i bez ujawniania DTO bazy w publicznym API domen.
 
@@ -186,6 +186,7 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 
 Automatyczne testy Playwright obejmują co najmniej:
 
+- jednostkową weryfikację czystych modeli: katalogu i filtrowania kategorii, wyglądu kategorii, grupowania i kolejności elementów oraz postępu list;
 - blokadę anonimowego dostępu przez RLS i logowanie konta z allowlisty;
 - relacyjny CRUD, integralność danych, triggery i niezmienność typu listy;
 - logowanie, wylogowanie oraz zapamiętywanie języka;
@@ -201,6 +202,7 @@ Automatyczne testy Playwright obejmują co najmniej:
 Podstawowe polecenia weryfikacyjne:
 
 - `npm run lint`
+- `npm run test:unit`
 - `npm run test:e2e`
 - `npm run test:e2e:db`
 - `npm run test:e2e:pwa`

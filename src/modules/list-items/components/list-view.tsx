@@ -27,31 +27,27 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { memo, useMemo, useState } from 'react'
+import { memo, useState } from 'react'
 
 import { ThemeToggle } from '@/components/theme-toggle'
 import { SwipeToDelete } from '@/components/ui/swipe-to-delete'
 import { cn } from '@/lib/utils'
-import { getCategoryEmoji, type Category } from '@/src/modules/categories'
+import { getCategoryEmoji } from '@/src/modules/categories'
 import { LanguageToggle, useI18n } from '@/src/modules/i18n'
-import type { List } from '@/src/modules/lists'
 
 import type { PendingItem } from '../hooks/use-item-composer'
+import { useListViewModel } from '../hooks/use-list-view-model'
+import type { CategoryGroup } from '../model/list-view.model'
 import type { ListItem } from '../types/list-item.types'
+import type {
+  ListViewCategory,
+  ListViewList,
+} from '../types/list-view.types'
 import { ItemAutocomplete } from './item-autocomplete'
 
-const UNCATEGORIZED_ID = '__other__'
-
-type CategoryGroup = {
-  id: string
-  name: string
-  emoji: string
-  items: ListItem[]
-}
-
 type ListViewProps = {
-  list: List
-  categories: Category[]
+  list: ListViewList
+  categories: ListViewCategory[]
   items: ListItem[]
   pendingItem: PendingItem | null
   onBack: () => void
@@ -173,7 +169,7 @@ function SortableCategorySection({
               aria-hidden
               className="mr-1 inline-flex size-7 items-center justify-center rounded-lg bg-accent text-base"
             >
-              {group.emoji}
+              {group.isUncategorized ? '📦' : getCategoryEmoji(group.name)}
             </span>
             {group.name}
           </h2>
@@ -228,59 +224,8 @@ export function ListView({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const sensors = useSensors(useSensor(PointerSensor), useSensor(TouchSensor))
   const isTodo = list.list_type === 'todo'
-
-  const allCategoryIds = useMemo(
-    () => [...categories.map(({ id }) => id), UNCATEGORIZED_ID],
-    [categories],
-  )
-
-  const effectiveCategoryOrder = useMemo(
-    () => [
-      ...categoryOrder.filter((id) => allCategoryIds.includes(id)),
-      ...allCategoryIds.filter((id) => !categoryOrder.includes(id)),
-    ],
-    [allCategoryIds, categoryOrder],
-  )
-
-  const groups = useMemo(() => {
-    const byCategory = new Map<string, ListItem[]>()
-
-    for (const item of items) {
-      const key = item.category_id ?? UNCATEGORIZED_ID
-      const groupItems = byCategory.get(key) ?? []
-      groupItems.push(item)
-      byCategory.set(key, groupItems)
-    }
-
-    const categoryById = new Map(categories.map((category) => [category.id, category]))
-
-    return effectiveCategoryOrder
-      .map((id): CategoryGroup | null => {
-        const groupItems = byCategory.get(id) ?? []
-        if (groupItems.length === 0) return null
-
-        const category = categoryById.get(id)
-        return {
-          id,
-          name: category?.name ?? t('list.other'),
-          emoji: category ? getCategoryEmoji(category.name) : '📦',
-          items: [...groupItems].sort((left, right) =>
-            left.is_done === right.is_done ? 0 : left.is_done ? 1 : -1,
-          ),
-        }
-      })
-      .filter((group): group is CategoryGroup => group !== null)
-  }, [categories, effectiveCategoryOrder, items, t])
-
-  const todoItems = useMemo(
-    () =>
-      [...items].sort((left, right) =>
-        left.is_done === right.is_done ? 0 : left.is_done ? 1 : -1,
-      ),
-    [items],
-  )
-
-  const completedCount = items.filter((item) => item.is_done).length
+  const { completedCount, effectiveCategoryOrder, groups, todoItems } =
+    useListViewModel(categories, items, categoryOrder, t('list.other'))
 
   async function submit() {
     if (!name.trim() || isSubmitting) return

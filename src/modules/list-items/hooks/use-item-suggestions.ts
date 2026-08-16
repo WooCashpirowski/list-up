@@ -2,9 +2,8 @@
 
 import { useMemo } from 'react'
 
-import type { Category } from '@/src/modules/categories'
-
 import type { ItemSuggestion } from '../types/item-suggestion.types'
+import type { ListViewCategory } from '../types/list-view.types'
 
 const MIN_QUERY_LENGTH = 2
 
@@ -18,7 +17,7 @@ function normalize(value: string): string {
 }
 
 export function useItemSuggestions(
-  categories: Category[],
+  categories: ListViewCategory[],
   query: string,
 ): ItemSuggestion[] {
   const catalog = useMemo(() => {

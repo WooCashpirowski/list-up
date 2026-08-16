@@ -1,19 +1,24 @@
 'use client'
 
 import { Pencil, Plus, Search, Tags, Trash2, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 import { ThemeToggle } from '@/components/theme-toggle'
 import { cn } from '@/lib/utils'
 import { LanguageToggle, useI18n } from '@/src/modules/i18n'
-import type { ListItem } from '@/src/modules/list-items'
 
+import { useCategorySearch } from '../hooks/use-category-search'
+import {
+  getCategoryEmoji,
+  getCategoryTone,
+} from '../model/category-appearance'
+import type { CategoryItemReference } from '../model/category-catalog'
 import type { Category } from '../types/category.types'
 import { CategoryEditModal } from './category-edit-modal'
 
 type CategoriesViewProps = {
   categories: Category[]
-  items: ListItem[]
+  items: CategoryItemReference[]
   onCreateCategory: (name: string) => Promise<string | null>
   onSaveCategory: (
     id: string,
@@ -21,27 +26,6 @@ type CategoriesViewProps = {
     keywords: string[],
   ) => Promise<boolean>
   onDeleteCategory: (id: string) => Promise<void>
-}
-
-const categoryEmoji: Record<string, string> = {
-  alkohol: '🍷',
-  elektronika: '🔌',
-  higiena: '🧴',
-  makarony: '🍝',
-  mięso: '🥩',
-  mrożonki: '❄️',
-  nabiał: '🥛',
-  napoje: '🥤',
-  obuwie: '👟',
-  odzież: '👕',
-  owoce: '🍎',
-  pieczywo: '🥖',
-  przekąski: '🍫',
-  przyprawy: '🧂',
-  ryby: '🐟',
-  warzywa: '🥦',
-  zioła: '🌿',
-  zwierzęta: '🐾',
 }
 
 const categoryToneClassNames = {
@@ -53,33 +37,6 @@ const categoryToneClassNames = {
   neutral: 'bg-accent text-accent-foreground',
 } as const
 
-function getCategoryTone(name: string): keyof typeof categoryToneClassNames {
-  const normalized = name
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLocaleLowerCase('pl')
-
-  if (/owoce|warzywa|ziola/.test(normalized)) return 'produce'
-  if (/pieczywo|makarony|zbozowe|przekaski|przyprawy|konserwy|alkohol/.test(normalized)) {
-    return 'pantry'
-  }
-  if (/nabial|mrozonki|napoje/.test(normalized)) return 'chilled'
-  if (/mieso|wedliny|ryby/.test(normalized)) return 'protein'
-  if (/higiena|gosp|elektronika|odziez|obuwie|zwierzeta/.test(normalized)) {
-    return 'home'
-  }
-
-  return 'neutral'
-}
-
-export function getCategoryEmoji(name: string): string {
-  const normalized = name.toLocaleLowerCase('pl')
-  const match = Object.entries(categoryEmoji).find(([keyword]) =>
-    normalized.includes(keyword),
-  )
-  return match?.[1] ?? '🏷️'
-}
-
 export function CategoriesView({
   categories,
   items,
@@ -88,50 +45,10 @@ export function CategoriesView({
   onDeleteCategory,
 }: CategoriesViewProps) {
   const { t } = useI18n()
-  const [query, setQuery] = useState('')
+  const { entries, query, setQuery } = useCategorySearch(categories, items)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
-
-  const itemsByCategory = useMemo(() => {
-    const map = new Map<string, Map<string, string>>()
-
-    for (const category of categories) {
-      const names = new Map<string, string>()
-      for (const keyword of category.keywords) {
-        const trimmedKeyword = keyword.trim()
-        if (!trimmedKeyword) continue
-        names.set(trimmedKeyword.toLocaleLowerCase('pl'), trimmedKeyword)
-      }
-      map.set(category.id, names)
-    }
-
-    for (const item of items) {
-      if (!item.category_id) continue
-      const names = map.get(item.category_id) ?? new Map<string, string>()
-      const trimmedName = item.name.trim()
-      if (!trimmedName) continue
-      names.set(trimmedName.toLocaleLowerCase('pl'), trimmedName)
-      map.set(item.category_id, names)
-    }
-
-    return map
-  }, [categories, items])
-
-  const normalizedQuery = query.trim().toLocaleLowerCase('pl')
-  const filtered = useMemo(
-    () =>
-      categories.filter((category) => {
-        if (!normalizedQuery) return true
-        const itemNames = Array.from(
-          itemsByCategory.get(category.id)?.values() ?? [],
-        )
-        return [category.name, ...itemNames].some((value) =>
-          value.toLocaleLowerCase('pl').includes(normalizedQuery),
-        )
-      }),
-    [categories, itemsByCategory, normalizedQuery],
-  )
 
   async function submitCreate() {
     const id = await onCreateCategory(newName)
@@ -213,10 +130,7 @@ export function CategoriesView({
           </div>
         )}
 
-        {filtered.map((category) => {
-          const categoryItems = Array.from(
-            itemsByCategory.get(category.id)?.values() ?? [],
-          )
+        {entries.map(({ category, itemNames }) => {
           return (
             <article
               key={category.id}
@@ -261,9 +175,9 @@ export function CategoriesView({
                 </>
               </div>
 
-              {categoryItems.length > 0 ? (
+              {itemNames.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {categoryItems.map((name) => (
+                  {itemNames.map((name) => (
                     <span
                       key={name}
                       className="rounded-full border border-border/70 bg-secondary/80 px-3 py-1 text-xs font-medium text-secondary-foreground"
@@ -281,7 +195,7 @@ export function CategoriesView({
           )
         })}
 
-        {filtered.length === 0 && !adding && (
+        {entries.length === 0 && !adding && (
           <div className="py-10 text-center text-sm text-muted-foreground">
             <Tags className="mx-auto mb-3 size-7" />
             {t('categories.noMatches', { query })}
