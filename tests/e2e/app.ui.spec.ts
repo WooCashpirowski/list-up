@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import type { Database } from '@/src/lib/supabase/database.types'
 
@@ -91,6 +91,78 @@ async function getOutboxCount(page: Page): Promise<number> {
         }
       }),
   )
+}
+
+async function dragAcross(
+  page: Page,
+  target: Locator,
+  horizontalRatio: number,
+  verticalRatio = 0,
+  beforeRelease?: () => Promise<void>,
+  steps = 8,
+) {
+  const bounds = await target.boundingBox()
+  if (!bounds) throw new Error('Swipe target is not visible')
+
+  const startX = bounds.x + bounds.width / 2
+  const startY = bounds.y + bounds.height / 2
+  await page.mouse.move(startX, startY)
+  await page.mouse.down()
+  await page.mouse.move(
+    startX + bounds.width * horizontalRatio,
+    startY + bounds.height * verticalRatio,
+    { steps },
+  )
+  if (beforeRelease) await beforeRelease()
+  await page.mouse.up()
+}
+
+async function touchDragAcross(
+  page: Page,
+  target: Locator,
+  horizontalRatio: number,
+  verticalRatio = 0,
+  beforeRelease?: () => Promise<void>,
+) {
+  const bounds = await target.boundingBox()
+  if (!bounds) throw new Error('Touch swipe target is not visible')
+
+  const session = await page.context().newCDPSession(page)
+  const startX = bounds.x + bounds.width / 2
+  const startY = bounds.y + bounds.height / 2
+  const touchPoint = (x: number, y: number) => [
+    { x, y, id: 1, radiusX: 5, radiusY: 5, force: 1 },
+  ]
+
+  await session.send('Emulation.setTouchEmulationEnabled', {
+    enabled: true,
+    maxTouchPoints: 1,
+  })
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: touchPoint(startX, startY),
+  })
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchMove',
+    touchPoints: touchPoint(startX + 3, startY + 3),
+  })
+  for (let step = 1; step <= 8; step += 1) {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: touchPoint(
+        startX + bounds.width * horizontalRatio * (step / 8),
+        startY + bounds.height * verticalRatio * (step / 8),
+      ),
+    })
+  }
+
+  if (beforeRelease) await beforeRelease()
+
+  await session.send('Input.dispatchTouchEvent', {
+    type: 'touchEnd',
+    touchPoints: [],
+  })
+  await session.detach()
 }
 
 test.describe('Shared Grocery & Todo UI with Supabase', () => {
@@ -343,6 +415,100 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
 
     page.once('dialog', (dialog) => void dialog.accept())
     await todoCard.getByRole('button', { name: `Delete ${listTitle}` }).click()
+    await expectDatabaseCount(client, 'lists', listTitle, 0)
+    cleanupListTitles.delete(listTitle)
+  })
+
+  test('deletes list items and lists with thresholded swipes in both directions', async ({
+    page,
+  }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const listTitle = `Playwright swipe list ${suffix}`
+    const rightSwipeItem = `Playwright swipe right ${suffix}`
+    const leftSwipeItem = `Playwright swipe left ${suffix}`
+    const flickSwipeItem = `Playwright swipe flick ${suffix}`
+    const retainedItem = `Playwright retained item ${suffix}`
+    cleanupListTitles.add(listTitle)
+
+    const { data: list, error: listError } = await client
+      .from('lists')
+      .insert({ title: listTitle, list_type: 'todo' })
+      .select('id')
+      .single()
+    expect(listError).toBeNull()
+
+    const { error: itemsError } = await client.from('list_items').insert([
+      { list_id: list!.id, name: rightSwipeItem },
+      { list_id: list!.id, name: leftSwipeItem },
+      { list_id: list!.id, name: flickSwipeItem },
+      { list_id: list!.id, name: retainedItem },
+    ])
+    expect(itemsError).toBeNull()
+
+    await signInViaUi(page)
+    const listCard = page
+      .locator('[data-swipe-to-delete]')
+      .filter({ hasText: listTitle })
+
+    await dragAcross(page, listCard, 0.25, 0, async () => {
+      await expect(listCard).toHaveAttribute('data-swipe-state', 'swiping')
+      await expect(listCard).toHaveAttribute('data-swipe-direction', 'right')
+      await expect(listCard.locator('[aria-hidden="true"]').first()).toHaveCSS(
+        'opacity',
+        '1',
+      )
+      await page.waitForTimeout(150)
+    })
+    await expect(listCard).toHaveAttribute('data-swipe-state', 'idle')
+    await expectDatabaseCount(client, 'lists', listTitle, 1)
+
+    await page.waitForTimeout(500)
+    await page.getByText(listTitle, { exact: true }).click()
+    await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
+
+    const rightSwipeRow = page
+      .locator('[data-swipe-to-delete]')
+      .filter({ hasText: rightSwipeItem })
+    await touchDragAcross(page, rightSwipeRow, 0.42, 0, async () => {
+      await expect(rightSwipeRow).toHaveAttribute('data-swipe-state', 'swiping')
+      await expect(rightSwipeRow).toHaveAttribute('data-swipe-direction', 'right')
+    })
+    await expect(page.getByText(rightSwipeItem, { exact: true })).toHaveCount(0)
+    await expectDatabaseCount(client, 'list_items', rightSwipeItem, 0)
+
+    const leftSwipeRow = page
+      .locator('[data-swipe-to-delete]')
+      .filter({ hasText: leftSwipeItem })
+    await dragAcross(page, leftSwipeRow, -0.6)
+    await expect(page.getByText(leftSwipeItem, { exact: true })).toHaveCount(0)
+    await expectDatabaseCount(client, 'list_items', leftSwipeItem, 0)
+
+    const flickSwipeRow = page
+      .locator('[data-swipe-to-delete]')
+      .filter({ hasText: flickSwipeItem })
+    await dragAcross(page, flickSwipeRow, -0.24, 0, undefined, 1)
+    await expect(page.getByText(flickSwipeItem, { exact: true })).toHaveCount(0)
+    await expectDatabaseCount(client, 'list_items', flickSwipeItem, 0)
+
+    const retainedRow = page
+      .locator('[data-swipe-to-delete]')
+      .filter({ hasText: retainedItem })
+    await dragAcross(page, retainedRow, 0.05, 0.6)
+    await expect(page.getByText(retainedItem, { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Back to lists' }).click()
+    const cardAfterReturn = page
+      .locator('[data-swipe-to-delete]')
+      .filter({ hasText: listTitle })
+
+    page.once('dialog', (dialog) => void dialog.dismiss())
+    await dragAcross(page, cardAfterReturn, -0.6)
+    await expect(cardAfterReturn).toHaveAttribute('data-swipe-state', 'idle')
+    await expectDatabaseCount(client, 'lists', listTitle, 1)
+
+    page.once('dialog', (dialog) => void dialog.accept())
+    await dragAcross(page, cardAfterReturn, 0.6)
+    await expect(cardAfterReturn).toHaveCount(0)
     await expectDatabaseCount(client, 'lists', listTitle, 0)
     cleanupListTitles.delete(listTitle)
   })

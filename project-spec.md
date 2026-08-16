@@ -106,6 +106,7 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 - Listy są sortowane malejąco według `updated_at`.
 - Karta pokazuje tytuł, typ listy, liczbę elementów, postęp i informację o ostatniej aktywności.
 - Użytkownik może utworzyć listę, zmienić jej nazwę i ją usunąć.
+- Kartę listy można usunąć również pełnym swipe'em w lewo lub w prawo. Po rozpoczęciu gestu odsłaniane jest tło błędu z ikoną kosza, a po przekroczeniu progu gest uruchamia to samo potwierdzenie i tę samą mutację co przycisk usuwania.
 - Podczas tworzenia wybiera typ `shopping` albo `todo`; edycja nazwy nie pozwala zmienić typu.
 - Po utworzeniu lista jest od razu otwierana.
 - Mutacje są realizowane jako Optimistic UI.
@@ -120,10 +121,12 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 - Elementy są grupowane według kategorii, a wykonane pozycje są wyświetlane na końcu grupy.
 - Sekcje można zwijać i zmieniać ich kolejność przez Drag & Drop. Oba ustawienia są stanem lokalnym bieżącego widoku i nie są synchronizowane.
 - Użytkownik może oznaczyć element jako wykonany, przywrócić go, usunąć, usunąć wszystkie wykonane albo wyczyścić całą listę.
+- Pojedynczy element można usunąć pełnym swipe'em w lewo lub w prawo. Niepełny albo anulowany gest przywraca element do pozycji początkowej bez mutacji.
 
 ### 6.4. Lista todo
 
 - Lista todo jest płaską checklistą bez grup kategorii, wyboru kategorii, automatycznego dopasowania i Drag & Drop.
+- Elementy todo obsługują ten sam gest swipe-to-delete co elementy listy zakupowej.
 - Nowy element otrzymuje `category_id = null`; może zawierać opcjonalną ilość lub krótką informację pomocniczą w polu `quantity`.
 - Niewykonane zadania są prezentowane przed wykonanymi.
 - Oznaczanie, przywracanie, pojedyncze usuwanie i czyszczenie działa tak samo jak na liście zakupowej.
@@ -170,6 +173,9 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 - Każdy kolor tła posiada właściwy token tekstu/ikony, zapewniający odpowiedni kontrast w obu motywach.
 - Karty, sticky headers i dolna nawigacja tworzą spójny system powierzchni z subtelnymi obramowaniami, cieniami i efektem szkła.
 - Interaktywne ikony posiadają etykiety dostępności, stany aktywne, focus i czytelny feedback operacji.
+- Swipe-to-delete rozpoznaje dominującą oś ruchu, nie blokuje pionowego przewijania i nie jest jedyną metodą wykonania akcji; dostępny pozostaje przycisk obsługiwany dotykiem, myszą i klawiaturą.
+- Gest kończy akcję po przekroczeniu bezpiecznego progu pozycyjnego albo po krótszym, zdecydowanym flicku; drobny pionowy jitter palca nie anuluje ruchu poziomego.
+- Animacje swipe respektują `prefers-reduced-motion`, korzystają z transformacji kompozytora i nie powodują re-renderowania całej listy podczas ruchu wskaźnika.
 - Elementy list są memoizowane, a kosztowne sortowanie, filtrowanie i grupowanie korzysta z `useMemo`; callbacki mutacji pozostają stabilne tam, gdzie ma to wpływ na renderowanie.
 
 ## 9. Kryteria akceptacji i testy
@@ -181,6 +187,7 @@ Automatyczne testy Playwright obejmują co najmniej:
 - logowanie, wylogowanie oraz zapamiętywanie języka;
 - adresy widoków, bezpośrednie wejście do listy oraz nawigację Back i Forward między listą, wszystkimi listami i kategoriami;
 - CRUD listy zakupowej i jej elementów;
+- progowe usuwanie list i elementów swipe'em w obu kierunkach zdarzeniami myszy i dotyku, anulowanie niepełnego gestu oraz zachowanie alternatywnego przycisku usuwania;
 - utworzenie płaskiej listy todo z elementami bez kategorii;
 - pracę z kategoriami: tworzenie, zmiana nazwy, wyszukiwanie, edycja fraz i usuwanie;
 - odbieranie zmian list i elementów przez Supabase Realtime;

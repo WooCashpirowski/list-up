@@ -30,6 +30,7 @@ import {
 import { memo, useMemo, useState } from 'react'
 
 import { ThemeToggle } from '@/components/theme-toggle'
+import { SwipeToDelete } from '@/components/ui/swipe-to-delete'
 import { cn } from '@/lib/utils'
 import { LanguageToggle, useI18n } from '@/src/modules/i18n'
 import { getCategoryEmoji } from '@/src/modules/categories/components/categories-view'
@@ -83,48 +84,50 @@ const ItemRow = memo(function ItemRow({
 
   return (
     <li
-      className={`flex items-center gap-1 pr-2 ${
-        index !== 0 ? 'border-t border-border/70' : ''
-      }`}
+      className={index !== 0 ? 'border-t border-border/70' : undefined}
     >
-      <button
-        onClick={() => void onToggle(item.id)}
-        aria-label={t('list.toggleItem', { name: item.name })}
-        className="flex flex-1 items-center gap-3 py-3.5 pl-3 text-left"
-      >
-        <span
-          className={`flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-            item.is_done
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-border'
-          }`}
-        >
-          {item.is_done && <Check className="size-3.5" strokeWidth={3} />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span
-            className={`block truncate text-base ${
-              item.is_done
-                ? 'text-muted-foreground line-through'
-                : 'font-medium text-foreground'
-            }`}
+      <SwipeToDelete onDelete={() => onDelete(item.id)}>
+        <div className="flex items-center gap-1 pr-2">
+          <button
+            onClick={() => void onToggle(item.id)}
+            aria-label={t('list.toggleItem', { name: item.name })}
+            className="flex flex-1 items-center gap-3 py-3.5 pl-3 text-left"
           >
-            {item.name}
-          </span>
-        </span>
-        {item.quantity && (
-          <span className="shrink-0 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-            {item.quantity}
-          </span>
-        )}
-      </button>
-      <button
-        onClick={() => void onDelete(item.id)}
-        aria-label={t('list.deleteItem', { name: item.name })}
-        className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground/60 active:scale-90 active:text-destructive"
-      >
-        <Trash2 className="size-4" />
-      </button>
+            <span
+              className={`flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+                item.is_done
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border'
+              }`}
+            >
+              {item.is_done && <Check className="size-3.5" strokeWidth={3} />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span
+                className={`block truncate text-base ${
+                  item.is_done
+                    ? 'text-muted-foreground line-through'
+                    : 'font-medium text-foreground'
+                }`}
+              >
+                {item.name}
+              </span>
+            </span>
+            {item.quantity && (
+              <span className="shrink-0 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+                {item.quantity}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => void onDelete(item.id)}
+            aria-label={t('list.deleteItem', { name: item.name })}
+            className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground/60 active:scale-90 active:text-destructive"
+          >
+            <Trash2 className="size-4" />
+          </button>
+        </div>
+      </SwipeToDelete>
     </li>
   )
 })

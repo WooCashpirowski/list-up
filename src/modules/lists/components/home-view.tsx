@@ -11,6 +11,7 @@ import {
     X,
 } from 'lucide-react';
 import {
+    useCallback,
     useEffect,
     useMemo,
     useRef,
@@ -19,6 +20,7 @@ import {
 } from 'react';
 
 import { ThemeToggle } from '@/components/theme-toggle';
+import { SwipeToDelete } from '@/components/ui/swipe-to-delete';
 import { cn } from '@/lib/utils';
 import { LanguageToggle, useI18n } from '@/src/modules/i18n';
 import type { ListItem } from '@/src/modules/list-items/types/list-item.types';
@@ -115,6 +117,24 @@ export function HomeView({
         setEditingId(null);
     }
 
+    const requestDeleteList = useCallback(
+        async (list: List): Promise<boolean> => {
+            if (
+                !window.confirm(
+                    t('home.deleteConfirm', {
+                        title: list.title,
+                    }),
+                )
+            ) {
+                return false;
+            }
+
+            await onDeleteList(list.id);
+            return true;
+        },
+        [onDeleteList, t],
+    );
+
     return (
         <div className='mx-auto flex w-full max-w-md flex-col px-5 pb-28 pt-14'>
             <header className='mb-7 flex items-start justify-between gap-4'>
@@ -142,8 +162,14 @@ export function HomeView({
                     const isTodo = list.list_type === 'todo';
 
                     return (
-                        <article
+                        <SwipeToDelete
                             key={list.id}
+                            disabled={isEditing}
+                            onDelete={() => requestDeleteList(list)}
+                            className='rounded-3xl'
+                            contentClassName='rounded-3xl'
+                        >
+                        <article
                             className={cn(
                                 'surface-card rounded-3xl border bg-card/95 p-3 transition-colors',
                                 isTodo
@@ -242,17 +268,9 @@ export function HomeView({
                                     <Pencil className='size-4' />
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        if (
-                                            window.confirm(
-                                                t('home.deleteConfirm', {
-                                                    title: list.title,
-                                                }),
-                                            )
-                                        ) {
-                                            void onDeleteList(list.id);
-                                        }
-                                    }}
+                                    onClick={() =>
+                                        void requestDeleteList(list)
+                                    }
                                     aria-label={t('home.delete', {
                                         title: list.title,
                                     })}
@@ -300,6 +318,7 @@ export function HomeView({
                                 </div>
                             )}
                         </article>
+                        </SwipeToDelete>
                     );
                 })}
 
