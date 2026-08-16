@@ -140,6 +140,56 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await expect(page.getByRole('heading', { name: 'Pieczywo', exact: true })).toBeHidden()
   })
 
+  test('keeps views in the URL and supports browser history navigation', async ({
+    page,
+  }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const listTitle = `Playwright navigation list ${suffix}`
+    cleanupListTitles.add(listTitle)
+
+    const { data: list, error } = await client
+      .from('lists')
+      .insert({ title: listTitle, list_type: 'shopping' })
+      .select('id')
+      .single()
+    expect(error).toBeNull()
+
+    await signInViaUi(page)
+    await page.getByText(listTitle, { exact: true }).click()
+
+    await expect(page).toHaveURL(new RegExp(`\\?list=${list!.id}$`))
+    await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
+
+    await page.goBack()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: 'My Lists' })).toBeVisible()
+
+    await page.goForward()
+    await expect(page).toHaveURL(new RegExp(`\\?list=${list!.id}$`))
+    await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
+
+    await page.reload()
+    await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
+
+    await page.goto(`/?list=${list!.id}`)
+    await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
+    await page.getByRole('button', { name: 'Back to lists' }).click()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: 'My Lists' })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Categories', exact: true }).click()
+    await expect(page).toHaveURL(/\?view=categories$/)
+    await expect(page.getByRole('heading', { name: 'Categories' })).toBeVisible()
+
+    await page.goBack()
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: 'My Lists' })).toBeVisible()
+
+    await page.goForward()
+    await expect(page).toHaveURL(/\?view=categories$/)
+    await expect(page.getByRole('heading', { name: 'Categories' })).toBeVisible()
+  })
+
   test('switches the UI to Polish and remembers the selection', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('button', { name: 'Switch language to Polish' }).click()
@@ -250,10 +300,12 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
           const bounds = widget.getBoundingClientRect()
           return bounds.top >= 0 && bounds.bottom <= window.innerHeight
         }),
-      )
+    )
       .toBe(true)
     await page.getByLabel('Name your list').fill(listTitle)
-    await page.getByRole('radio', { name: /^Todo/ }).check()
+    const listTypeGroup = page.getByRole('group', { name: 'List type' })
+    await listTypeGroup.getByText('Todo', { exact: true }).click()
+    await expect(listTypeGroup.getByRole('radio', { name: /^Todo/ })).toBeChecked()
     await page.getByRole('button', { name: 'Create', exact: true }).click()
 
     await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()

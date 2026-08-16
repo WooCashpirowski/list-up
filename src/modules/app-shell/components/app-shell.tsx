@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 
 import { AuthProvider, LoginView, useAuth } from '@/src/modules/auth'
 import { CategoriesView, useCategories } from '@/src/modules/categories'
@@ -9,13 +9,20 @@ import { ListView, useItemComposer, useListItems } from '@/src/modules/list-item
 import { HomeView, useLists } from '@/src/modules/lists'
 import { OfflineStatus, useOfflineSync } from '@/src/modules/offline'
 
+import { useAppNavigation } from '../hooks'
 import { AppLoading, DataErrorBanner } from './app-feedback'
-import { BottomNav, type AppTab } from './bottom-nav'
+import { BottomNav } from './bottom-nav'
 
 function AuthenticatedApp({ userId }: { userId: string }) {
   const { signOut } = useAuth()
-  const [tab, setTab] = useState<AppTab>('home')
-  const [openListId, setOpenListId] = useState<string | null>(null)
+  const {
+    tab,
+    listId: openListId,
+    openList: navigateToList,
+    selectTab,
+    backToLists,
+    replaceWithLists,
+  } = useAppNavigation()
   const listsState = useLists(userId)
   const categoriesState = useCategories(userId)
   const itemsState = useListItems(userId)
@@ -41,6 +48,10 @@ function AuthenticatedApp({ userId }: { userId: string }) {
     listsState.isLoading || categoriesState.isLoading || itemsState.isLoading
   const error = listsState.error ?? categoriesState.error ?? itemsState.error
 
+  useEffect(() => {
+    if (!listsState.isLoading && openListId && !openList) replaceWithLists()
+  }, [listsState.isLoading, openList, openListId, replaceWithLists])
+
   if (isLoading) return <AppLoading />
 
   const inList = tab === 'home' && openList !== null
@@ -57,7 +68,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
             categories={categoriesState.categories}
             items={openListItems}
             pendingItem={composer.pendingItem}
-            onBack={() => setOpenListId(null)}
+            onBack={backToLists}
             onSubmitItem={composer.submitItem}
             onAssignPendingItem={composer.assignPendingItem}
             onKeepPendingItemUncategorized={composer.keepPendingItemUncategorized}
@@ -70,7 +81,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
           <HomeView
             lists={listsState.lists}
             items={itemsState.items}
-            onOpenList={setOpenListId}
+            onOpenList={navigateToList}
             onCreateList={listsState.createList}
             onRenameList={listsState.renameList}
             onDeleteList={listsState.deleteList}
@@ -90,10 +101,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       {!inList && (
         <BottomNav
           active={tab}
-          onChange={(nextTab) => {
-            setTab(nextTab)
-            setOpenListId(null)
-          }}
+          onChange={selectTab}
           onLogout={() => void signOut()}
         />
       )}

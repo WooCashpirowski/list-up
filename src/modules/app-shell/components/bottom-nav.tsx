@@ -5,7 +5,7 @@ import { Home, LayoutGrid, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/src/modules/i18n'
 
-export type AppTab = 'home' | 'categories'
+import type { AppTab } from '../types'
 
 type BottomNavProps = {
   active: AppTab
