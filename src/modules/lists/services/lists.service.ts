@@ -6,6 +6,7 @@ import type {
   List,
   UpdateListInput,
 } from '../types/list.types'
+import { toList } from './list.mapper'
 
 export async function getLists(client?: AppSupabaseClient): Promise<List[]> {
   const supabase = resolveSupabaseClient(client)
@@ -15,7 +16,7 @@ export async function getLists(client?: AppSupabaseClient): Promise<List[]> {
     .order('updated_at', { ascending: false })
     .throwOnError()
 
-  return data
+  return data.map(toList)
 }
 
 export async function getListById(
@@ -30,7 +31,7 @@ export async function getListById(
     .maybeSingle()
     .throwOnError()
 
-  return data
+  return data ? toList(data) : null
 }
 
 export async function createList(
@@ -45,7 +46,7 @@ export async function createList(
     .single()
     .throwOnError()
 
-  return data
+  return toList(data)
 }
 
 export async function updateList(
@@ -62,7 +63,7 @@ export async function updateList(
     .single()
     .throwOnError()
 
-  return data
+  return toList(data)
 }
 
 export async function deleteList(
@@ -78,5 +79,5 @@ export async function deleteList(
     .single()
     .throwOnError()
 
-  return data
+  return toList(data)
 }

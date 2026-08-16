@@ -2,11 +2,11 @@
 
 import { useCallback, useState } from 'react'
 
-import { findCategoryForItem } from '@/src/modules/categories/services/category-matcher'
 import type {
   Category,
   UpdateCategoryInput,
-} from '@/src/modules/categories/types/category.types'
+} from '@/src/modules/categories'
+import { findCategoryForItem } from '@/src/modules/categories'
 
 import type { AddListItemInput } from './use-list-items'
 

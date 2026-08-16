@@ -1,24 +1,3 @@
-import type {
-  Category,
-  CategoryInsert,
-  CategoryUpdate,
-} from '@/src/modules/categories/types/category.types'
-import type {
-  ListItem,
-  ListItemInsert,
-  ListItemUpdate,
-} from '@/src/modules/list-items/types/list-item.types'
-import type {
-  List,
-  ListInsert,
-  ListUpdate,
-} from '@/src/modules/lists/types/list.types'
-import type {
-  Profile,
-  ProfileInsert,
-  ProfileUpdate,
-} from '@/src/modules/profiles/types/profile.types'
-
 export type Json =
   | string
   | number
@@ -31,15 +10,51 @@ export type Database = {
   public: {
     Tables: {
       profiles: {
-        Row: Profile
-        Insert: ProfileInsert
-        Update: ProfileUpdate
+        Row: {
+          id: string
+          email: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          email: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          created_at?: string
+          updated_at?: string
+        }
         Relationships: []
       }
       lists: {
-        Row: List
-        Insert: ListInsert
-        Update: ListUpdate
+        Row: {
+          id: string
+          title: string
+          list_type: string
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          list_type?: string
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          list_type?: string
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
         Relationships: [
           {
             foreignKeyName: 'lists_created_by_fkey'
@@ -51,9 +66,33 @@ export type Database = {
         ]
       }
       categories: {
-        Row: Category
-        Insert: CategoryInsert
-        Update: CategoryUpdate
+        Row: {
+          id: string
+          name: string
+          order_index: number
+          keywords: Json[]
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          order_index?: number
+          keywords?: Json[]
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          order_index?: number
+          keywords?: Json[]
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
         Relationships: [
           {
             foreignKeyName: 'categories_created_by_fkey'
@@ -65,9 +104,42 @@ export type Database = {
         ]
       }
       list_items: {
-        Row: ListItem
-        Insert: ListItemInsert
-        Update: ListItemUpdate
+        Row: {
+          id: string
+          list_id: string
+          category_id: string | null
+          name: string
+          quantity: string | null
+          is_done: boolean
+          done_at: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          list_id: string
+          category_id?: string | null
+          name: string
+          quantity?: string | null
+          is_done?: boolean
+          done_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          list_id?: string
+          category_id?: string | null
+          name?: string
+          quantity?: string | null
+          is_done?: boolean
+          done_at?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
         Relationships: [
           {
             foreignKeyName: 'list_items_category_id_fkey'

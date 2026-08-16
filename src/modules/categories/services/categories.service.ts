@@ -6,6 +6,7 @@ import type {
   CreateCategoryInput,
   UpdateCategoryInput,
 } from '../types/category.types'
+import { toCategory } from './category.mapper'
 
 export async function getCategories(
   client?: AppSupabaseClient,
@@ -17,7 +18,7 @@ export async function getCategories(
     .order('name', { ascending: true })
     .throwOnError()
 
-  return data
+  return data.map(toCategory)
 }
 
 export async function getCategoryById(
@@ -32,7 +33,7 @@ export async function getCategoryById(
     .maybeSingle()
     .throwOnError()
 
-  return data
+  return data ? toCategory(data) : null
 }
 
 export async function createCategory(
@@ -47,7 +48,7 @@ export async function createCategory(
     .single()
     .throwOnError()
 
-  return data
+  return toCategory(data)
 }
 
 export async function updateCategory(
@@ -64,7 +65,7 @@ export async function updateCategory(
     .single()
     .throwOnError()
 
-  return data
+  return toCategory(data)
 }
 
 export async function deleteCategory(
@@ -80,5 +81,5 @@ export async function deleteCategory(
     .single()
     .throwOnError()
 
-  return data
+  return toCategory(data)
 }

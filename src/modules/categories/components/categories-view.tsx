@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { cn } from '@/lib/utils'
 import { LanguageToggle, useI18n } from '@/src/modules/i18n'
-import type { ListItem } from '@/src/modules/list-items/types/list-item.types'
+import type { ListItem } from '@/src/modules/list-items'
 
 import type { Category } from '../types/category.types'
 import { CategoryEditModal } from './category-edit-modal'

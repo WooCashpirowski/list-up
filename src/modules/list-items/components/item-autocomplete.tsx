@@ -3,8 +3,7 @@
 import { Check, Search } from 'lucide-react'
 import { useId, useState } from 'react'
 
-import { getCategoryEmoji } from '@/src/modules/categories/components/categories-view'
-import type { Category } from '@/src/modules/categories/types/category.types'
+import { getCategoryEmoji, type Category } from '@/src/modules/categories'
 import { useI18n } from '@/src/modules/i18n'
 
 import { useItemSuggestions } from '../hooks/use-item-suggestions'

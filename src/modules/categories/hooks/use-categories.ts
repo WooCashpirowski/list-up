@@ -21,6 +21,10 @@ import {
   getCategories,
   updateCategory as updateCategoryRecord,
 } from '../services/categories.service'
+import {
+  toCategory,
+  type CategoryRecord,
+} from '../services/category.mapper'
 import type { Category, UpdateCategoryInput } from '../types/category.types'
 
 function sortCategories(categories: Category[]): Category[] {
@@ -70,9 +74,9 @@ export function useCategories(userId: string) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'categories' },
-        (payload: RealtimePostgresChangesPayload<Category>) => {
+        (payload: RealtimePostgresChangesPayload<CategoryRecord>) => {
           setCategories((current) => {
-            const next = applyRealtimeChange(current, payload)
+            const next = applyRealtimeChange(current, payload, toCategory)
             return next === current ? current : sortCategories(next)
           })
         },

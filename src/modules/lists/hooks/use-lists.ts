@@ -21,6 +21,7 @@ import {
   getLists,
   updateList as updateListRecord,
 } from '../services/lists.service'
+import { toList, type ListRecord } from '../services/list.mapper'
 import type { List, ListType } from '../types/list.types'
 
 function sortLists(lists: List[]): List[] {
@@ -78,9 +79,9 @@ export function useLists(userId: string) {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'lists' },
-        (payload: RealtimePostgresChangesPayload<List>) => {
+        (payload: RealtimePostgresChangesPayload<ListRecord>) => {
           setLists((current) => {
-            const next = applyRealtimeChange(current, payload)
+            const next = applyRealtimeChange(current, payload, toList)
             return next === current ? current : sortLists(next)
           })
         },

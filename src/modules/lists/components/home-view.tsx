@@ -23,7 +23,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { SwipeToDelete } from '@/components/ui/swipe-to-delete';
 import { cn } from '@/lib/utils';
 import { LanguageToggle, useI18n } from '@/src/modules/i18n';
-import type { ListItem } from '@/src/modules/list-items/types/list-item.types';
+import type { ListItem } from '@/src/modules/list-items';
 
 import type { List, ListType } from '../types/list.types';
 import { ListTypeSelector } from './list-type-selector';

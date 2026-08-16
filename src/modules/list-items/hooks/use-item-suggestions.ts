@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 
-import type { Category } from '@/src/modules/categories/types/category.types'
+import type { Category } from '@/src/modules/categories'
 
 import type { ItemSuggestion } from '../types/item-suggestion.types'
 

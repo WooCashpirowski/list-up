@@ -1,2 +1,14 @@
-export * from './services'
-export type * from './types'
+export {
+  createProfile,
+  deleteProfile,
+  getProfileById,
+  getProfiles,
+  updateProfile,
+} from './services/profiles.service'
+export type {
+  CreateProfileInput,
+  Profile,
+  ProfileInsert,
+  ProfileUpdate,
+  UpdateProfileInput,
+} from './types/profile.types'

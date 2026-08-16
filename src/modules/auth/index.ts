@@ -1,4 +1,3 @@
-export * from './components'
-export * from './hooks'
-export * from './services'
-export type * from './types'
+export { LoginView } from './components/login-view'
+export { AuthProvider, useAuth } from './hooks/use-auth'
+export type { AuthStatus, SignInInput } from './types/auth.types'
