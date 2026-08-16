@@ -1,11 +1,9 @@
 'use client'
 
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { applyCollectionChange } from '@/src/lib/collections/collection-change'
 import { getErrorMessage } from '@/src/lib/get-error-message'
-import { createClient } from '@/src/lib/supabase/client'
-import { applyRealtimeChange } from '@/src/lib/supabase/realtime-collection'
 import {
   executeOrQueueMutation,
   getCachedCollection,
@@ -15,13 +13,7 @@ import {
   saveCachedCollection,
 } from '@/src/modules/offline'
 
-import {
-  clearListItems as clearListItemRecords,
-  createListItem as createListItemRecord,
-  deleteListItem as deleteListItemRecord,
-  getAllListItems,
-  updateListItem as updateListItemRecord,
-} from '../services/list-items.service'
+import { createSupabaseListItemsGateway } from '../services/supabase-list-items.gateway'
 import type { ListItem } from '../types/list-item.types'
 
 const DONE_RETENTION_MS = 5 * 60 * 1000
@@ -34,7 +26,7 @@ export type AddListItemInput = {
 }
 
 export function useListItems(userId: string) {
-  const supabase = useMemo(() => createClient(), [])
+  const gateway = useMemo(() => createSupabaseListItemsGateway(), [])
   const [items, setItems] = useState<ListItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,14 +34,14 @@ export function useListItems(userId: string) {
 
   const refresh = useCallback(async () => {
     try {
-      setItems(await getAllListItems(supabase))
+      setItems(await gateway.getAllListItems())
       setError(null)
     } catch (nextError) {
       if (!isNetworkFailure(nextError)) setError(getErrorMessage(nextError))
     } finally {
       setIsLoading(false)
     }
-  }, [supabase])
+  }, [gateway])
 
   useEffect(() => {
     let active = true
@@ -68,25 +60,18 @@ export function useListItems(userId: string) {
         else setIsLoading(false)
       })
 
-    const channel = supabase
-      .channel(`list-items:${userId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'list_items' },
-        (payload: RealtimePostgresChangesPayload<ListItem>) => {
-          setItems((current) => applyRealtimeChange(current, payload))
-        },
-      )
-      .subscribe()
+    const unsubscribe = gateway.subscribe(userId, (change) => {
+      setItems((current) => applyCollectionChange(current, change))
+    })
     const handleOutboxSynced = () => void refresh()
     window.addEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
 
     return () => {
       active = false
       window.removeEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
-      void supabase.removeChannel(channel)
+      unsubscribe()
     }
-  }, [refresh, supabase, userId])
+  }, [gateway, refresh, userId])
 
   useEffect(() => {
     if (!hasHydratedCache) return
@@ -127,12 +112,12 @@ export function useListItems(userId: string) {
         recordId: id,
       }))
       void executeOrQueueMutation(mutations, () =>
-        Promise.all(expiredIds.map((id) => deleteListItemRecord(id, supabase))),
+        Promise.all(expiredIds.map((id) => gateway.deleteListItem(id))),
       ).catch((nextError) => setError(getErrorMessage(nextError)))
     }, delay)
 
     return () => window.clearTimeout(timer)
-  }, [items, supabase, userId])
+  }, [gateway, items, userId])
 
   const addItem = useCallback(
     async (input: AddListItemInput): Promise<boolean> => {
@@ -172,7 +157,7 @@ export function useListItems(userId: string) {
             recordId: id,
             payload,
           },
-          () => createListItemRecord(payload, supabase),
+          () => gateway.createListItem(payload),
         )
         if (result.status === 'synced') {
           setItems((current) =>
@@ -187,7 +172,7 @@ export function useListItems(userId: string) {
         return false
       }
     },
-    [supabase, userId],
+    [gateway, userId],
   )
 
   const toggleItem = useCallback(
@@ -216,7 +201,7 @@ export function useListItems(userId: string) {
             recordId: id,
             payload: { is_done: isDone },
           },
-          () => updateListItemRecord(id, { is_done: isDone }, supabase),
+          () => gateway.updateListItem(id, { is_done: isDone }),
         )
         if (result.status === 'synced') {
           setItems((current) =>
@@ -231,7 +216,7 @@ export function useListItems(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [items, supabase, userId],
+    [gateway, items, userId],
   )
 
   const deleteItem = useCallback(
@@ -250,7 +235,7 @@ export function useListItems(userId: string) {
             operation: 'delete',
             recordId: id,
           },
-          () => deleteListItemRecord(id, supabase),
+          () => gateway.deleteListItem(id),
         )
         setError(null)
       } catch (nextError) {
@@ -262,7 +247,7 @@ export function useListItems(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [items, supabase, userId],
+    [gateway, items, userId],
   )
 
   const clearItems = useCallback(
@@ -286,7 +271,7 @@ export function useListItems(userId: string) {
           recordId: item.id,
         }))
         await executeOrQueueMutation(mutations, () =>
-          clearListItemRecords(listId, onlyDone, supabase),
+          gateway.clearListItems(listId, onlyDone),
         )
         setError(null)
       } catch (nextError) {
@@ -294,7 +279,7 @@ export function useListItems(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [items, supabase, userId],
+    [gateway, items, userId],
   )
 
   return {

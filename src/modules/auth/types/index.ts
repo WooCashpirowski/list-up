@@ -1,1 +1,6 @@
-export type { AuthStatus, SignInInput } from './auth.types'
+export type {
+  AuthSession,
+  AuthStatus,
+  AuthUser,
+  SignInInput,
+} from './auth.types'

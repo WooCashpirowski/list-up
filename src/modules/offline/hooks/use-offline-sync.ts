@@ -3,20 +3,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { getErrorMessage } from '@/src/lib/get-error-message'
-import { createClient } from '@/src/lib/supabase/client'
 
 import {
   getOutboxMutations,
   isBrowserOnline,
   OUTBOX_CHANGED_EVENT,
-  synchronizeOutbox,
 } from '../services'
+import { createSupabaseOfflineSyncGateway } from '../services/supabase-offline-sync.gateway'
 import type { OfflineSyncState } from '../types/offline.types'
 
 const RETRY_DELAY_MS = 15_000
 
 export function useOfflineSync(userId: string): OfflineSyncState {
-  const supabase = useMemo(() => createClient(), [])
+  const gateway = useMemo(() => createSupabaseOfflineSyncGateway(), [])
   const [state, setState] = useState<OfflineSyncState>(() => ({
     isOnline: isBrowserOnline(),
     isSyncing: false,
@@ -47,7 +46,7 @@ export function useOfflineSync(userId: string): OfflineSyncState {
     setState((current) => ({ ...current, isOnline: true, isSyncing: true }))
 
     try {
-      const result = await synchronizeOutbox(userId, supabase)
+      const result = await gateway.synchronize(userId)
       setState((current) => ({
         ...current,
         ...result,
@@ -62,7 +61,7 @@ export function useOfflineSync(userId: string): OfflineSyncState {
         lastError: getErrorMessage(error),
       }))
     }
-  }, [supabase, userId])
+  }, [gateway, userId])
 
   useEffect(() => {
     const handleOnline = () => {

@@ -1,11 +1,9 @@
 'use client'
 
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { applyCollectionChange } from '@/src/lib/collections/collection-change'
 import { getErrorMessage } from '@/src/lib/get-error-message'
-import { createClient } from '@/src/lib/supabase/client'
-import { applyRealtimeChange } from '@/src/lib/supabase/realtime-collection'
 import {
   executeOrQueueMutation,
   getCachedCollection,
@@ -15,16 +13,7 @@ import {
   saveCachedCollection,
 } from '@/src/modules/offline'
 
-import {
-  createCategory as createCategoryRecord,
-  deleteCategory as deleteCategoryRecord,
-  getCategories,
-  updateCategory as updateCategoryRecord,
-} from '../services/categories.service'
-import {
-  toCategory,
-  type CategoryRecord,
-} from '../services/category.mapper'
+import { createSupabaseCategoriesGateway } from '../services/supabase-categories.gateway'
 import type { Category, UpdateCategoryInput } from '../types/category.types'
 
 function sortCategories(categories: Category[]): Category[] {
@@ -34,7 +23,7 @@ function sortCategories(categories: Category[]): Category[] {
 }
 
 export function useCategories(userId: string) {
-  const supabase = useMemo(() => createClient(), [])
+  const gateway = useMemo(() => createSupabaseCategoriesGateway(), [])
   const [categories, setCategories] = useState<Category[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,14 +31,14 @@ export function useCategories(userId: string) {
 
   const refresh = useCallback(async () => {
     try {
-      setCategories(await getCategories(supabase))
+      setCategories(await gateway.getCategories())
       setError(null)
     } catch (nextError) {
       if (!isNetworkFailure(nextError)) setError(getErrorMessage(nextError))
     } finally {
       setIsLoading(false)
     }
-  }, [supabase])
+  }, [gateway])
 
   useEffect(() => {
     let active = true
@@ -69,28 +58,21 @@ export function useCategories(userId: string) {
         else setIsLoading(false)
       })
 
-    const channel = supabase
-      .channel(`categories:${userId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'categories' },
-        (payload: RealtimePostgresChangesPayload<CategoryRecord>) => {
-          setCategories((current) => {
-            const next = applyRealtimeChange(current, payload, toCategory)
-            return next === current ? current : sortCategories(next)
-          })
-        },
-      )
-      .subscribe()
+    const unsubscribe = gateway.subscribe(userId, (change) => {
+      setCategories((current) => {
+        const next = applyCollectionChange(current, change)
+        return next === current ? current : sortCategories(next)
+      })
+    })
     const handleOutboxSynced = () => void refresh()
     window.addEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
 
     return () => {
       active = false
       window.removeEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
-      void supabase.removeChannel(channel)
+      unsubscribe()
     }
-  }, [refresh, supabase, userId])
+  }, [gateway, refresh, userId])
 
   useEffect(() => {
     if (!hasHydratedCache) return
@@ -133,7 +115,7 @@ export function useCategories(userId: string) {
             recordId: id,
             payload,
           },
-          () => createCategoryRecord(payload, supabase),
+          () => gateway.createCategory(payload),
         )
         if (result.status === 'synced') {
           setCategories((current) =>
@@ -152,7 +134,7 @@ export function useCategories(userId: string) {
         return null
       }
     },
-    [categories.length, supabase, userId],
+    [categories.length, gateway, userId],
   )
 
   const updateCategory = useCallback(
@@ -179,7 +161,7 @@ export function useCategories(userId: string) {
             recordId: id,
             payload: { ...input },
           },
-          () => updateCategoryRecord(id, input, supabase),
+          () => gateway.updateCategory(id, input),
         )
         if (result.status === 'synced') {
           setCategories((current) =>
@@ -202,7 +184,7 @@ export function useCategories(userId: string) {
         return false
       }
     },
-    [categories, supabase, userId],
+    [categories, gateway, userId],
   )
 
   const saveCategory = useCallback(
@@ -237,7 +219,7 @@ export function useCategories(userId: string) {
             operation: 'delete',
             recordId: id,
           },
-          () => deleteCategoryRecord(id, supabase),
+          () => gateway.deleteCategory(id),
         )
         setError(null)
       } catch (nextError) {
@@ -245,7 +227,7 @@ export function useCategories(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [categories, supabase, userId],
+    [categories, gateway, userId],
   )
 
   return {

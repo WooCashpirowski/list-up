@@ -1,34 +1,25 @@
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 
+import type { CollectionChange } from '../collections/collection-change'
+
 type IdentifiableRecord = {
   id: string
 }
 
-export function applyRealtimeChange<
+export function toCollectionChange<
   Record extends IdentifiableRecord,
   IncomingRecord extends IdentifiableRecord = Record,
 >(
-  records: Record[],
   payload: RealtimePostgresChangesPayload<IncomingRecord>,
   mapRecord: (record: IncomingRecord) => Record = (record) =>
     record as unknown as Record,
-): Record[] {
+): CollectionChange<Record> | null {
   if (payload.eventType === 'DELETE') {
     const deletedId = payload.old.id
-    if (typeof deletedId !== 'string') return records
+    if (typeof deletedId !== 'string') return null
 
-    const next = records.filter(({ id }) => id !== deletedId)
-    return next.length === records.length ? records : next
+    return { type: 'delete', id: deletedId }
   }
 
-  const changedRecord = mapRecord(payload.new)
-  const currentIndex = records.findIndex(({ id }) => id === changedRecord.id)
-
-  if (currentIndex === -1) {
-    return [...records, changedRecord]
-  }
-
-  const next = [...records]
-  next[currentIndex] = changedRecord
-  return next
+  return { type: 'upsert', record: mapRecord(payload.new) }
 }

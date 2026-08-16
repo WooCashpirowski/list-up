@@ -1,11 +1,9 @@
 'use client'
 
-import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import { applyCollectionChange } from '@/src/lib/collections/collection-change'
 import { getErrorMessage } from '@/src/lib/get-error-message'
-import { createClient } from '@/src/lib/supabase/client'
-import { applyRealtimeChange } from '@/src/lib/supabase/realtime-collection'
 import {
   executeOrQueueMutation,
   getCachedCollection,
@@ -15,13 +13,7 @@ import {
   saveCachedCollection,
 } from '@/src/modules/offline'
 
-import {
-  createList as createListRecord,
-  deleteList as deleteListRecord,
-  getLists,
-  updateList as updateListRecord,
-} from '../services/lists.service'
-import { toList, type ListRecord } from '../services/list.mapper'
+import { createSupabaseListsGateway } from '../services/supabase-lists.gateway'
 import type { List, ListType } from '../types/list.types'
 
 function sortLists(lists: List[]): List[] {
@@ -38,7 +30,7 @@ function sortLists(lists: List[]): List[] {
 }
 
 export function useLists(userId: string) {
-  const supabase = useMemo(() => createClient(), [])
+  const gateway = useMemo(() => createSupabaseListsGateway(), [])
   const [lists, setLists] = useState<List[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +38,7 @@ export function useLists(userId: string) {
 
   const refresh = useCallback(async () => {
     try {
-      const records = await getLists(supabase)
+      const records = await gateway.getLists()
       setLists(sortLists(records))
       setError(null)
     } catch (nextError) {
@@ -54,7 +46,7 @@ export function useLists(userId: string) {
     } finally {
       setIsLoading(false)
     }
-  }, [supabase])
+  }, [gateway])
 
   useEffect(() => {
     let active = true
@@ -74,28 +66,21 @@ export function useLists(userId: string) {
         else setIsLoading(false)
       })
 
-    const channel = supabase
-      .channel(`lists:${userId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'lists' },
-        (payload: RealtimePostgresChangesPayload<ListRecord>) => {
-          setLists((current) => {
-            const next = applyRealtimeChange(current, payload, toList)
-            return next === current ? current : sortLists(next)
-          })
-        },
-      )
-      .subscribe()
+    const unsubscribe = gateway.subscribe(userId, (change) => {
+      setLists((current) => {
+        const next = applyCollectionChange(current, change)
+        return next === current ? current : sortLists(next)
+      })
+    })
     const handleOutboxSynced = () => void refresh()
     window.addEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
 
     return () => {
       active = false
       window.removeEventListener(OUTBOX_SYNCED_EVENT, handleOutboxSynced)
-      void supabase.removeChannel(channel)
+      unsubscribe()
     }
-  }, [refresh, supabase, userId])
+  }, [gateway, refresh, userId])
 
   useEffect(() => {
     if (!hasHydratedCache) return
@@ -132,10 +117,11 @@ export function useLists(userId: string) {
             payload: { id, title: trimmedTitle, list_type: listType },
           },
           () =>
-            createListRecord(
-              { id, title: trimmedTitle, list_type: listType },
-              supabase,
-            ),
+            gateway.createList({
+              id,
+              title: trimmedTitle,
+              list_type: listType,
+            }),
         )
         if (result.status === 'synced') {
           setLists((current) =>
@@ -150,7 +136,7 @@ export function useLists(userId: string) {
         return null
       }
     },
-    [supabase, userId],
+    [gateway, userId],
   )
 
   const renameList = useCallback(
@@ -179,7 +165,7 @@ export function useLists(userId: string) {
             recordId: id,
             payload: { title: trimmedTitle },
           },
-          () => updateListRecord(id, { title: trimmedTitle }, supabase),
+          () => gateway.updateList(id, { title: trimmedTitle }),
         )
         if (result.status === 'synced') {
           setLists((current) =>
@@ -196,7 +182,7 @@ export function useLists(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [lists, supabase, userId],
+    [gateway, lists, userId],
   )
 
   const deleteList = useCallback(
@@ -214,7 +200,7 @@ export function useLists(userId: string) {
             operation: 'delete',
             recordId: id,
           },
-          () => deleteListRecord(id, supabase),
+          () => gateway.deleteList(id),
         )
         setError(null)
       } catch (nextError) {
@@ -222,7 +208,7 @@ export function useLists(userId: string) {
         setError(getErrorMessage(nextError))
       }
     },
-    [lists, supabase, userId],
+    [gateway, lists, userId],
   )
 
   return {

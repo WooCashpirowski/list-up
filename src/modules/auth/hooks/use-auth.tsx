@@ -1,6 +1,5 @@
 'use client'
 
-import type { Session, User } from '@supabase/supabase-js'
 import {
   createContext,
   useCallback,
@@ -10,14 +9,17 @@ import {
   useState,
 } from 'react'
 
-import { createClient } from '@/src/lib/supabase/client'
-
-import { getSession, signInWithPassword, signOut } from '../services/auth.service'
-import type { AuthStatus, SignInInput } from '../types/auth.types'
+import { createSupabaseAuthGateway } from '../services/supabase-auth.gateway'
+import type {
+  AuthSession,
+  AuthStatus,
+  AuthUser,
+  SignInInput,
+} from '../types/auth.types'
 
 type AuthContextValue = {
-  session: Session | null
-  user: User | null
+  session: AuthSession | null
+  user: AuthUser | null
   status: AuthStatus
   signIn: (input: SignInInput) => Promise<void>
   signOut: () => Promise<void>
@@ -26,14 +28,15 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const supabase = useMemo(() => createClient(), [])
-  const [session, setSession] = useState<Session | null>(null)
+  const gateway = useMemo(() => createSupabaseAuthGateway(), [])
+  const [session, setSession] = useState<AuthSession | null>(null)
   const [status, setStatus] = useState<AuthStatus>('loading')
 
   useEffect(() => {
     let active = true
 
-    void getSession(supabase)
+    void gateway
+      .getSession()
       .then((currentSession) => {
         if (!active) return
         setSession(currentSession)
@@ -45,9 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStatus('anonymous')
       })
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const unsubscribe = gateway.subscribe((nextSession) => {
       if (!active) return
       setSession(nextSession)
       setStatus(nextSession ? 'authenticated' : 'anonymous')
@@ -55,16 +56,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       active = false
-      subscription.unsubscribe()
+      unsubscribe()
     }
-  }, [supabase])
+  }, [gateway])
 
   const handleSignIn = useCallback(
     async (input: SignInInput) => {
       setStatus('loading')
 
       try {
-        const nextSession = await signInWithPassword(input, supabase)
+        const nextSession = await gateway.signIn(input)
         setSession(nextSession)
         setStatus('authenticated')
       } catch (error) {
@@ -73,14 +74,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error
       }
     },
-    [supabase],
+    [gateway],
   )
 
   const handleSignOut = useCallback(async () => {
-    await signOut(supabase)
+    await gateway.signOut()
     setSession(null)
     setStatus('anonymous')
-  }, [supabase])
+  }, [gateway])
 
   const value = useMemo<AuthContextValue>(
     () => ({

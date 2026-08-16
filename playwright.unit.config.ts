@@ -1,8 +1,8 @@
 import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
-  testDir: './src/modules',
-  testMatch: '**/model/*.test.ts',
+  testDir: './src',
+  testMatch: ['**/model/*.test.ts', '**/collections/*.test.ts'],
   outputDir: './test-results/unit',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
