@@ -133,7 +133,7 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 
 - Lista todo jest płaską checklistą bez grup kategorii, wyboru kategorii, automatycznego dopasowania i Drag & Drop.
 - Elementy todo obsługują ten sam gest swipe-to-delete co elementy listy zakupowej.
-- Nowy element otrzymuje `category_id = null`; może zawierać opcjonalną ilość lub krótką informację pomocniczą w polu `quantity`.
+- Nowy element otrzymuje `category_id = null` i `quantity = null`; formularz todo nie wyświetla pola ilości.
 - Niewykonane zadania są prezentowane przed wykonanymi.
 - Oznaczanie, przywracanie, pojedyncze usuwanie i czyszczenie działa tak samo jak na liście zakupowej.
 

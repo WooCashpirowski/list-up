@@ -319,8 +319,12 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     )
 
     await itemInput.fill(itemName)
-    await page.getByPlaceholder('Qty').fill('2')
-    await page.getByRole('button', { name: 'Add item' }).click()
+    const quantityInput = page.getByPlaceholder('Qty')
+    await itemInput.press('Enter')
+    await expect(quantityInput).toBeFocused()
+    await quantityInput.fill('2')
+    await quantityInput.press('Enter')
+    await expect(itemInput).toBeFocused()
 
     const item = page.getByText(itemName, { exact: true })
     await expect(item).toBeVisible()
@@ -382,9 +386,12 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
 
     await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Auto', exact: true })).toHaveCount(0)
+    await expect(page.getByPlaceholder('Qty')).toHaveCount(0)
 
-    await page.getByRole('textbox', { name: 'Task name', exact: true }).fill(itemName)
-    await page.getByRole('button', { name: 'Add task' }).click()
+    const taskInput = page.getByRole('textbox', { name: 'Task name', exact: true })
+    await taskInput.fill(itemName)
+    await taskInput.press('Enter')
+    await expect(taskInput).toBeFocused()
 
     await expect(page.getByText(itemName, { exact: true })).toBeVisible()
     await expect(page.getByText('Other', { exact: true })).toHaveCount(0)

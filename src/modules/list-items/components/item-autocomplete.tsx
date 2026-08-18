@@ -1,7 +1,7 @@
 'use client'
 
 import { Check, Search } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useId, useState, type Ref } from 'react'
 
 import { getCategoryEmoji } from '@/src/modules/categories'
 import { useI18n } from '@/src/modules/i18n'
@@ -12,18 +12,20 @@ import type { ListViewCategory } from '../types/list-view.types'
 
 type ItemAutocompleteProps = {
   categories: ListViewCategory[]
+  inputRef?: Ref<HTMLInputElement>
   value: string
   onChange: (value: string) => void
   onSelect: (suggestion: ItemSuggestion) => void
-  onSubmit: () => void
+  onAdvance: () => void
 }
 
 export function ItemAutocomplete({
   categories,
+  inputRef,
   value,
   onChange,
   onSelect,
-  onSubmit,
+  onAdvance,
 }: ItemAutocompleteProps) {
   const { t } = useI18n()
   const listboxId = useId()
@@ -48,6 +50,7 @@ export function ItemAutocomplete({
   return (
     <div className="relative min-w-0 flex-1">
       <input
+        ref={inputRef}
         role="combobox"
         aria-label={t('list.itemName')}
         aria-autocomplete="list"
@@ -88,7 +91,7 @@ export function ItemAutocomplete({
             if (isListboxVisible && activeSuggestion) {
               chooseSuggestion(activeSuggestion)
             } else {
-              onSubmit()
+              onAdvance()
             }
           }
         }}

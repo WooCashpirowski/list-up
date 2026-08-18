@@ -27,7 +27,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { memo, useState } from 'react'
+import { memo, useRef, useState } from 'react'
 
 import { ThemeToggle } from '@/components/theme-toggle'
 import { SwipeToDelete } from '@/components/ui/swipe-to-delete'
@@ -222,6 +222,8 @@ export function ListView({
   const [categoryOrder, setCategoryOrder] = useState<string[]>([])
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const quantityInputRef = useRef<HTMLInputElement>(null)
   const sensors = useSensors(useSensor(PointerSensor), useSensor(TouchSensor))
   const isTodo = list.list_type === 'todo'
   const { completedCount, effectiveCategoryOrder, groups, todoItems } =
@@ -232,12 +234,13 @@ export function ListView({
     setIsSubmitting(true)
     const created = await onSubmitItem(
       name,
-      quantity,
+      isTodo ? '' : quantity,
       isTodo ? null : selectedCategory,
     )
     if (created) {
       setName('')
       setQuantity('')
+      nameInputRef.current?.focus()
     }
     setIsSubmitting(false)
   }
@@ -247,6 +250,7 @@ export function ListView({
     if (created) {
       setName('')
       setQuantity('')
+      nameInputRef.current?.focus()
     }
   }
 
@@ -309,10 +313,14 @@ export function ListView({
           <div className="surface-card flex items-center gap-2 rounded-2xl border border-input bg-card/92 p-1.5 focus-within:border-primary/40">
             {isTodo ? (
               <input
+                ref={nameInputRef}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') void submit()
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void submit()
+                  }
                 }}
                 aria-label={t('list.todoItemName')}
                 placeholder={t('list.addTodoPlaceholder')}
@@ -321,23 +329,30 @@ export function ListView({
             ) : (
               <ItemAutocomplete
                 categories={categories}
+                inputRef={nameInputRef}
                 value={name}
                 onChange={setName}
                 onSelect={(suggestion) =>
                   setSelectedCategory(suggestion.categoryId)
                 }
-                onSubmit={() => void submit()}
+                onAdvance={() => quantityInputRef.current?.focus()}
               />
             )}
-            <input
-              value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void submit()
-              }}
-              placeholder={t('list.quantityPlaceholder')}
-              className="w-14 shrink-0 rounded-xl bg-secondary px-2 py-2 text-center text-sm outline-none placeholder:text-muted-foreground"
-            />
+            {!isTodo && (
+              <input
+                ref={quantityInputRef}
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void submit()
+                  }
+                }}
+                placeholder={t('list.quantityPlaceholder')}
+                className="w-14 shrink-0 rounded-xl bg-secondary px-2 py-2 text-center text-sm outline-none placeholder:text-muted-foreground"
+              />
+            )}
             <button
               onClick={() => void submit()}
               disabled={isSubmitting || !name.trim()}
