@@ -12,6 +12,7 @@ const OUTBOX_USER_INDEX = 'by-user'
 
 export const OUTBOX_CHANGED_EVENT = 'list-up:outbox-changed'
 export const OUTBOX_SYNCED_EVENT = 'list-up:outbox-synced'
+export const OUTBOX_STATUS_EVENT = 'list-up:outbox-status'
 
 type CacheRecord<T = unknown> = {
   key: string
@@ -194,4 +195,7 @@ export async function recordOutboxFailure(
     lastError: message,
   } satisfies OutboxMutation)
   await transactionComplete(transaction)
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(OUTBOX_STATUS_EVENT))
+  }
 }

@@ -7,7 +7,7 @@
 - dnd-kit (do obsługi Drag'n'Drop)
 
 ## Kod i architektura (Domain-Driven Design)
-- Kod podzielony na domeny w `/src/modules/` (np. `lists`, `categories`, `auth`).
+- Kod podzielony na domeny w `/src/modules/` (m.in. `lists`, `categories`, `auth`, `chat`, `notifications` i serwerowe `notification-dispatch`).
 - Domena może zawierać: `components`, `hooks`, `model`, `gateways`, `services` i `types`.
 - `model` zawiera czyste transformacje i logikę domenową, hooki zarządzają stanem oraz orkiestracją, `gateways` definiują porty domeny, a `services` implementują adaptery infrastruktury (np. Supabase).
 - Kod spoza domeny importuje wyłącznie z jej publicznego `src/modules/<moduł>/index.ts`; importy wewnętrznych ścieżek innych modułów są zabronione.
@@ -23,6 +23,10 @@
 - Mutacje (dodawanie, oznaczanie jako wykonane, usuwanie) muszą używać wzorca Optimistic UI – interfejs reaguje natychmiast, synchronizacja z bazą zachodzi w tle.
 
 ## Baza Danych i Logika (Supabase)
-- Tabele: `profiles` (id, email), `lists`, `categories`, `list_items` (zawiera flagę `is_done` i `done_at`).
+- Tabele aplikacyjne: `profiles` (z `display_name`), `lists`, `categories`, `list_items`, `chat_messages`, `chat_read_state` i `push_subscriptions`.
+- Tabele serwerowe `notification_events` oraz `notification_deliveries` tworzą trwały, rozszerzalny outbox Web Push; klient nie ma do nich dostępu.
 - Row Level Security (RLS) pozwala na dostęp wyłącznie wskazanym adresom email.
 - Auto-usuwanie: Elementy oznaczone jako wykonane znikają z UI po 5 minutach (obsłużone za pomocą lokalnego `setTimeout` oraz czyszczenia bazy w tle).
+- Wiadomości czatu są niemutowalne, stronicowane kursorem `sequence`, synchronizowane przez Realtime i kolejkę offline. Powiadomienia są wysyłane poza transakcją zapisu wiadomości.
+- Czat jest dostępny pod `/?view=chat`; cache zachowuje maksymalnie 100 najnowszych wiadomości, a wskaźnik nieprzeczytanych znika dopiero po zobaczeniu najnowszej odebranej wiadomości w widocznym czacie.
+- Dispatcher Web Push działa wyłącznie po stronie serwera z service-role, prywatnym VAPID i sekretem webhooka. Żaden z tych sekretów nie może być eksportowany z publicznego API domeny klienckiej ani używany w zmiennej `NEXT_PUBLIC_*`.

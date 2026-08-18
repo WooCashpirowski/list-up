@@ -4,10 +4,13 @@ import { useEffect, useMemo } from 'react'
 
 import { AuthProvider, LoginView, useAuth } from '@/src/modules/auth'
 import { CategoriesView, useCategories } from '@/src/modules/categories'
+import { ChatView, useChat } from '@/src/modules/chat'
 import { I18nProvider } from '@/src/modules/i18n'
 import { ListView, useItemComposer, useListItems } from '@/src/modules/list-items'
 import { HomeView, useLists } from '@/src/modules/lists'
+import { usePushNotifications } from '@/src/modules/notifications'
 import { OfflineStatus, useOfflineSync } from '@/src/modules/offline'
+import { useProfiles } from '@/src/modules/profiles'
 
 import { useAppNavigation } from '../hooks'
 import { AppLoading, DataErrorBanner } from './app-feedback'
@@ -27,6 +30,9 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const categoriesState = useCategories(userId)
   const itemsState = useListItems(userId)
   const offlineState = useOfflineSync(userId)
+  const profilesState = useProfiles(userId)
+  const chatState = useChat(userId, tab === 'chat')
+  const pushState = usePushNotifications(userId)
 
   const openList = useMemo(
     () => listsState.lists.find(({ id }) => id === openListId) ?? null,
@@ -46,7 +52,19 @@ function AuthenticatedApp({ userId }: { userId: string }) {
 
   const isLoading =
     listsState.isLoading || categoriesState.isLoading || itemsState.isLoading
-  const error = listsState.error ?? categoriesState.error ?? itemsState.error
+  const error =
+    listsState.error ??
+    categoriesState.error ??
+    itemsState.error ??
+    profilesState.error
+
+  const handleLogout = async () => {
+    try {
+      await pushState.cleanupBeforeSignOut()
+    } finally {
+      await signOut()
+    }
+  }
 
   useEffect(() => {
     if (!listsState.isLoading && openListId && !openList) replaceWithLists()
@@ -98,11 +116,30 @@ function AuthenticatedApp({ userId }: { userId: string }) {
         />
       )}
 
+      {tab === 'chat' && (
+        <ChatView
+          currentUserId={userId}
+          profiles={profilesState.profiles}
+          messages={chatState.messages}
+          isLoading={chatState.isLoading}
+          isLoadingOlder={chatState.isLoadingOlder}
+          hasOlder={chatState.hasOlder}
+          error={chatState.error}
+          push={pushState}
+          onSendMessage={chatState.sendMessage}
+          onRetryMessage={chatState.retryMessage}
+          onLoadOlder={chatState.loadOlder}
+          onMarkReadThrough={chatState.markReadThrough}
+          onUpdateDisplayName={profilesState.updateDisplayName}
+        />
+      )}
+
       {!inList && (
         <BottomNav
           active={tab}
           onChange={selectTab}
-          onLogout={() => void signOut()}
+          unreadChatCount={chatState.unreadCount}
+          onLogout={() => void handleLogout()}
         />
       )}
     </main>

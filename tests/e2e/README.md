@@ -13,7 +13,14 @@ record uses a unique name and is removed during cleanup.
 ```dotenv
 E2E_TEST_EMAIL=an-email-present-in-the-rls-allowlist@example.com
 E2E_TEST_PASSWORD=replace-me
+E2E_SECOND_USER_EMAIL=second-allowlisted-user@example.com
+E2E_SECOND_USER_PASSWORD=replace-me
+E2E_SUPABASE_SERVICE_ROLE_KEY=replace-me-for-tests-only
 ```
+
+The second account and service-role value are only required by the chat RLS,
+recipient, and notification-outbox integration test. Keep the service-role key
+in the ignored `.env.test.local`; it must never be exposed to browser code.
 
 ## Commands
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, LayoutGrid, LogOut } from 'lucide-react'
+import { Home, LayoutGrid, LogOut, MessagesSquare } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/src/modules/i18n'
@@ -11,13 +11,20 @@ type BottomNavProps = {
   active: AppTab
   onChange: (tab: AppTab) => void
   onLogout: () => void
+  unreadChatCount: number
 }
 
-export function BottomNav({ active, onChange, onLogout }: BottomNavProps) {
+export function BottomNav({
+  active,
+  onChange,
+  onLogout,
+  unreadChatCount,
+}: BottomNavProps) {
   const { t } = useI18n()
   const tabs: { id: AppTab; label: string; icon: typeof Home }[] = [
     { id: 'home', label: t('nav.home'), icon: Home },
     { id: 'categories', label: t('nav.categories'), icon: LayoutGrid },
+    { id: 'chat', label: t('nav.chat'), icon: MessagesSquare },
   ]
 
   return (
@@ -42,7 +49,15 @@ export function BottomNav({ active, onChange, onLogout }: BottomNavProps) {
                   : 'text-muted-foreground hover:bg-accent/45 hover:text-foreground',
               )}
             >
-              <Icon className="size-6" strokeWidth={isActive ? 2.4 : 2} />
+              <span className="relative">
+                <Icon className="size-6" strokeWidth={isActive ? 2.4 : 2} />
+                {tab.id === 'chat' && unreadChatCount > 0 && (
+                  <span
+                    aria-label={t('nav.chatUnread', { count: unreadChatCount })}
+                    className="absolute -right-1 -top-0.5 size-2.5 rounded-full border-2 border-card bg-destructive"
+                  />
+                )}
+              </span>
               {tab.label}
             </button>
           )

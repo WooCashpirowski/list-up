@@ -1,6 +1,11 @@
-export type CachedCollectionName = 'lists' | 'categories' | 'list-items'
+export type CachedCollectionName =
+  | 'lists'
+  | 'categories'
+  | 'list-items'
+  | 'chat-messages'
+  | 'profiles'
 
-export type OutboxTable = 'lists' | 'categories' | 'list_items'
+export type OutboxTable = 'lists' | 'categories' | 'list_items' | 'chat_messages'
 
 export type OutboxOperation = 'upsert' | 'update' | 'delete'
 

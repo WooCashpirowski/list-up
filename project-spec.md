@@ -30,6 +30,9 @@ Kod jest podzielony domenowo w katalogu `src/modules`. Główne moduły to:
 - `offline` — cache IndexedDB, outbox i synchronizacja zmian;
 - `i18n` — polska i angielska wersja interfejsu;
 - `profiles` — model profilu użytkownika.
+- `chat` — wiadomości 1:1, paginacja, stan odczytu i synchronizacja Realtime/offline;
+- `notifications` — subskrypcje Web Push i stan urządzenia;
+- `notification-dispatch` — serwerowy dispatcher dostaw uruchamiany wyłącznie w Node.js.
 
 Każda domena może zawierać warstwy `components`, `hooks`, `model`, `gateways`, `services` i `types`. Komponenty odpowiadają za prezentację i obsługę interakcji, `model` zawiera czyste, niezależne od Reacta transformacje danych, hooki zarządzają stanem, orkiestrują przypadki użycia i memoizują modele pochodne, `gateways` definiują porty wymaganej infrastruktury, a `services` zawierają ich adaptery oraz integrację z Supabase lub pamięcią lokalną. Grupowanie elementów list, kolejność pozycji wykonanych, katalog i filtrowanie kategorii oraz postęp list są wyliczane w warstwie `model`, poza komponentami widoków.
 
@@ -49,6 +52,7 @@ Nawigacja między głównymi widokami jest sterowana adresem URL i natywnym Hist
 
 - `id: uuid` — klucz zgodny z `auth.users.id`;
 - `email: text`;
+- `display_name: text` — edytowalna nazwa 1–60 znaków, domyślnie wyprowadzona z e-maila;
 - `created_at`, `updated_at`.
 
 ### `lists`
@@ -97,8 +101,8 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 
 ### 6.1. Powłoka, nawigacja i personalizacja
 
-- Główna nawigacja dolna zawiera widoki list i kategorii oraz akcję wylogowania.
-- Widok wszystkich list używa adresu `/`, konkretna lista `/?list=<list_id>`, a kategorie `/?view=categories`.
+- Główna nawigacja dolna zawiera widoki list, kategorii i czatu oraz akcję wylogowania. Ikona czatu pokazuje dostępny dla czytnika ekranu wskaźnik nieprzeczytanych wiadomości.
+- Widok wszystkich list używa adresu `/`, konkretna lista `/?list=<list_id>`, kategorie `/?view=categories`, a czat `/?view=chat`.
 - Otwarcie widoku dodaje wpis do historii przez `window.history.pushState`, dzięki czemu systemowy przycisk Back, gest powrotu na urządzeniu mobilnym oraz nawigacja Forward odtwarzają poprzedni widok bez przeładowania strony.
 - Odświeżenie lub bezpośrednie otwarcie adresu konkretnej listy przywraca ten widok po uwierzytelnieniu i załadowaniu danych. Nieistniejący identyfikator listy jest zastępowany adresem widoku wszystkich list.
 - Przycisk powrotu wewnątrz listy używa istniejącego wpisu historii, jeżeli lista została otwarta z aplikacji. Przy bezpośrednim wejściu zastępuje bieżący adres widokiem wszystkich list, aby nie przenosić użytkownika poza aplikację.
@@ -217,3 +221,33 @@ Podstawowe polecenia weryfikacyjne:
 - Typ istniejącej listy jest niezmienny.
 - Kolejność i zwinięcie kategorii wewnątrz listy nie są synchronizowane między urządzeniami.
 - Sekcja „Inne” jest wyłącznie reprezentacją elementów bez kategorii.
+
+## 11. Czat i powiadomienia Web Push
+
+- Aplikacja udostępnia jeden wspólny, tekstowy czat dla dwóch kont pod adresem `/?view=chat`. Nawigacja dolna pokazuje ikonę dymków oraz wskaźnik nieprzeczytanych wiadomości.
+- Wiadomość ma UUID generowany po stronie klienta, serwerowy kursor `sequence`, nadawcę, tekst długości 1–2000 znaków i czas utworzenia. Wiadomości nie można edytować ani usuwać przez klienta.
+- Najnowsze 50 wiadomości jest pobierane przy wejściu do widoku, a historia jest ładowana stronami po 50 rekordów za pomocą kursora `sequence`. IndexedDB zachowuje 100 najnowszych wiadomości.
+- Wysłanie działa optymistycznie. Przy braku sieci wiadomość trafia do wspólnego outboxa, pokazuje stan oczekiwania i jest wysyłana w tej samej kolejności po odzyskaniu połączenia. Błąd można ponowić ręcznie.
+- Stan odczytu jest współdzielony między urządzeniami. Kursor zostaje przesunięty dopiero wtedy, gdy najnowsza odebrana wiadomość jest rzeczywiście widoczna w aktywnym czacie.
+- Użytkownik może ustawić `profiles.display_name`; nazwa jest używana przy wiadomościach i w powiadomieniach, z fallbackiem wyprowadzonym z e-maila.
+- Każde urządzenie posiada osobną subskrypcję Web Push. Systemowy prompt jest wyświetlany wyłącznie po kliknięciu użytkownika, a wylogowanie usuwa i anuluje subskrypcję bieżącego urządzenia.
+- Na iOS Web Push wymaga dodania aplikacji do ekranu początkowego i systemu iOS 16.4 lub nowszego. Pozostałe platformy są wykrywane przez dostępność Service Worker, Push API i Notifications API.
+- `notification_events` opisuje typ zdarzenia, odbiorcę, autora i źródło. `notification_deliveries` przechowuje osobną dostawę dla każdej aktywnej subskrypcji, dzierżawę, próby oraz status końcowy.
+- Database Webhook wywołuje chroniony `POST /api/notifications/dispatch` po zapisie zdarzenia, a `pg_cron` co minutę ponawia zaległe dostawy. Endpoint wymaga sekretu, działa w Node.js i korzysta z service-role oraz prywatnego klucza VAPID.
+- Service Worker pomija powiadomienie, gdy aktywne okno ma otwarty czat. W pozostałych przypadkach pokazuje nazwę nadawcy i maksymalnie 120 znaków treści; kliknięcie otwiera lub fokusuje `/?view=chat`.
+- Dodanie kolejnych powiadomień, np. o nowych elementach list, wymaga nowego producenta `notification_event` i szablonu payloadu, bez zmiany subskrypcji, retry ani Service Workera.
+
+### 11.1. Sekrety i wdrożenie
+
+- Vercel: `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NOTIFICATION_WEBHOOK_SECRET`.
+- Supabase Vault: `notification_dispatch_url` wskazujący produkcyjny `/api/notifications/dispatch` oraz `notification_webhook_secret` o wartości zgodnej z Vercel.
+- Klucze VAPID są generowane jeden raz. Prywatny VAPID i service-role nie mogą trafić do repozytorium ani bundla klienta.
+- Kolejność wdrożenia: wygenerować VAPID i skonfigurować sekrety Vercel, wdrożyć dispatcher, zapisać URL i sekret w Vault, uruchomić migrację tworzącą webhook oraz zadania cron, a na końcu wdrożyć klienta i Service Worker.
+- Akceptacja mobilna obejmuje iPhone 11 z iOS 16.4+ po instalacji na ekranie początkowym oraz Samsung S24FE. Zgoda na powiadomienia musi być inicjowana bezpośrednim kliknięciem użytkownika.
+
+### 11.2. Testy czatu
+
+- Testy jednostkowe obejmują scalanie i kolejność wiadomości, wpisy optymistyczne, wybór najnowszej odebranej wiadomości oraz skracanie podglądu push.
+- Testy DB obejmują wymuszanie nadawcy, niemutowalność wiadomości, recipienta zdarzenia, prywatność subskrypcji i monotoniczny kursor odczytu.
+- Test dwóch kontekstów przeglądarki obejmuje Realtime, wskaźnik nieprzeczytanych oraz wysłanie wiadomości offline i synchronizację po odzyskaniu sieci.
+- Test PWA obejmuje ochronę dispatchera oraz obecność handlerów `push` i `notificationclick` w Service Workerze.

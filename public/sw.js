@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'list-up-pwa'
-const APP_SHELL_CACHE = `${CACHE_PREFIX}-shell-v2`
-const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v2`
+const APP_SHELL_CACHE = `${CACHE_PREFIX}-shell-v3`
+const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v3`
 const PRECACHE_URLS = [
   '/',
   '/offline.html',
@@ -90,4 +90,84 @@ self.addEventListener('fetch', (event) => {
     PRECACHE_URLS.includes(url.pathname)
 
   if (isApplicationAsset) event.respondWith(cacheFirst(request))
+})
+
+function readPushPayload(event) {
+  if (!event.data) return null
+
+  try {
+    return event.data.json()
+  } catch {
+    return {
+      title: 'List Up!',
+      body: event.data.text(),
+      tag: 'list-up-chat',
+      url: '/?view=chat',
+    }
+  }
+}
+
+async function hasFocusedChatClient() {
+  const windows = await self.clients.matchAll({
+    type: 'window',
+    includeUncontrolled: true,
+  })
+
+  return windows.some((client) => {
+    const url = new URL(client.url)
+    return (
+      client.focused &&
+      client.visibilityState === 'visible' &&
+      url.origin === self.location.origin &&
+      url.searchParams.get('view') === 'chat'
+    )
+  })
+}
+
+self.addEventListener('push', (event) => {
+  const payload = readPushPayload(event)
+  if (!payload) return
+
+  event.waitUntil(
+    hasFocusedChatClient().then((chatIsFocused) => {
+      if (chatIsFocused) return undefined
+
+      return self.registration.showNotification(payload.title || 'List Up!', {
+        body: payload.body || 'Nowa wiadomość',
+        tag: payload.tag || 'list-up-chat',
+        renotify: true,
+        icon: '/pwa-icon-192.png',
+        badge: '/pwa-icon-192.png',
+        data: {
+          url: payload.url || '/?view=chat',
+        },
+      })
+    }),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const requestedUrl = new URL(
+    event.notification.data?.url || '/?view=chat',
+    self.location.origin,
+  ).href
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then(async (windows) => {
+        const current = windows.find(
+          (client) => new URL(client.url).origin === self.location.origin,
+        )
+
+        if (current) {
+          if ('navigate' in current) await current.navigate(requestedUrl)
+          await current.focus()
+          return
+        }
+
+        await self.clients.openWindow(requestedUrl)
+      }),
+  )
 })

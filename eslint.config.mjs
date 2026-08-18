@@ -6,9 +6,12 @@ const moduleNames = [
   'app-shell',
   'auth',
   'categories',
+  'chat',
   'i18n',
   'list-items',
   'lists',
+  'notifications',
+  'notification-dispatch',
   'offline',
   'profiles',
 ]

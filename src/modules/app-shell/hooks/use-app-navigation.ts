@@ -64,10 +64,14 @@ export function useAppNavigation() {
   const search = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
   const searchParams = new URLSearchParams(search)
   const listId = searchParams.get('list')?.trim() || null
-  const tab: AppTab =
-    !listId && searchParams.get('view') === 'categories'
+  const view = searchParams.get('view')
+  const tab: AppTab = !listId
+    ? view === 'categories'
       ? 'categories'
-      : 'home'
+      : view === 'chat'
+        ? 'chat'
+        : 'home'
+    : 'home'
 
   const openList = useCallback((id: string) => {
     const nextSearch = `?${new URLSearchParams({ list: id }).toString()}`
@@ -78,9 +82,9 @@ export function useAppNavigation() {
 
   const selectTab = useCallback((nextTab: AppTab) => {
     const nextSearch =
-      nextTab === 'categories'
-        ? `?${new URLSearchParams({ view: 'categories' }).toString()}`
-        : ''
+      nextTab === 'home'
+        ? ''
+        : `?${new URLSearchParams({ view: nextTab }).toString()}`
 
     if (window.location.search === nextSearch) return
     updateUrl(nextSearch, 'push')

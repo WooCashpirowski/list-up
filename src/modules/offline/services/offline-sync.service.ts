@@ -23,6 +23,7 @@ type CategoriesInsert = Database['public']['Tables']['categories']['Insert']
 type CategoriesUpdate = Database['public']['Tables']['categories']['Update']
 type ListItemsInsert = Database['public']['Tables']['list_items']['Insert']
 type ListItemsUpdate = Database['public']['Tables']['list_items']['Update']
+type ChatMessagesInsert = Database['public']['Tables']['chat_messages']['Insert']
 
 const activeSynchronizations = new Map<string, Promise<OutboxSyncResult>>()
 
@@ -111,6 +112,18 @@ async function executeMutation(
         .eq('id', mutation.recordId)
         .throwOnError()
     }
+    return
+  }
+
+  if (mutation.table === 'chat_messages') {
+    if (mutation.operation === 'delete') {
+      throw new Error('Chat messages are immutable')
+    }
+
+    const { error } = await supabase
+      .from('chat_messages')
+      .insert(mutation.payload as ChatMessagesInsert)
+    if (error && error.code !== '23505') throw error
     return
   }
 

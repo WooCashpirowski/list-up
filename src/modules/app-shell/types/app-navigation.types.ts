@@ -1,1 +1,1 @@
-export type AppTab = 'home' | 'categories'
+export type AppTab = 'home' | 'categories' | 'chat'

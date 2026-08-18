@@ -1,6 +1,7 @@
 export type Profile = {
   id: string
   email: string
+  display_name: string
   created_at: string
   updated_at: string
 }
@@ -8,6 +9,7 @@ export type Profile = {
 export type ProfileInsert = {
   id: string
   email: string
+  display_name?: string
   created_at?: string
   updated_at?: string
 }
@@ -15,10 +17,11 @@ export type ProfileInsert = {
 export type ProfileUpdate = {
   id?: string
   email?: string
+  display_name?: string
   created_at?: string
   updated_at?: string
 }
 
 export type CreateProfileInput = Pick<ProfileInsert, 'id' | 'email'>
 
-export type UpdateProfileInput = Pick<ProfileUpdate, 'email'>
+export type UpdateProfileInput = Pick<ProfileUpdate, 'email' | 'display_name'>
