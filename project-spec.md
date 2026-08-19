@@ -237,6 +237,7 @@ Podstawowe polecenia weryfikacyjne:
 - `notification_events` opisuje typ zdarzenia, odbiorcę, autora i źródło. `notification_deliveries` przechowuje osobną dostawę dla każdej aktywnej subskrypcji, dzierżawę, próby oraz status końcowy.
 - Database Webhook wywołuje chroniony `POST /api/notifications/dispatch` po zapisie zdarzenia, a `pg_cron` co minutę ponawia zaległe dostawy. Endpoint wymaga sekretu, działa w Node.js i korzysta z service-role oraz prywatnego klucza VAPID.
 - Service Worker pomija powiadomienie, gdy aktywne okno ma otwarty czat. W pozostałych przypadkach pokazuje nazwę nadawcy i maksymalnie 120 znaków treści; kliknięcie otwiera lub fokusuje `/?view=chat`.
+- Rozwinięte powiadomienie używa pełnokolorowej ikony aplikacji, natomiast Android otrzymuje osobny monochromatyczny `badge` 96×96 z białym symbolem i przezroczystym tłem, aby pasek statusu i ekran blokady nie pokazywały białego kwadratu.
 - Dodanie kolejnych powiadomień, np. o nowych elementach list, wymaga nowego producenta `notification_event` i szablonu payloadu, bez zmiany subskrypcji, retry ani Service Workera.
 
 ### 11.1. Sekrety i wdrożenie

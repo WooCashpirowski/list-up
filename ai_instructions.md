@@ -31,3 +31,4 @@
 - Czat jest dostępny pod `/?view=chat`; cache zachowuje maksymalnie 100 najnowszych wiadomości, a wskaźnik nieprzeczytanych znika dopiero po zobaczeniu najnowszej odebranej wiadomości w widocznym czacie.
 - Efemeryczne potwierdzenia i stan pisania korzystają z autoryzowanego prywatnego kanału Realtime Broadcast `list-up:chat:live`. Stan pisania nie jest zapisywany w bazie, jest ograniczany częstotliwościowo i musi automatycznie wygasać po bezczynności lub rozłączeniu.
 - Dispatcher Web Push działa wyłącznie po stronie serwera z service-role, prywatnym VAPID i sekretem webhooka. Żaden z tych sekretów nie może być eksportowany z publicznego API domeny klienckiej ani używany w zmiennej `NEXT_PUBLIC_*`.
+- Powiadomienia używają pełnokolorowego `icon` oraz osobnego `badge` 96×96: białego, monochromatycznego symbolu na całkowicie przezroczystym tle, przeznaczonego dla paska statusu i ekranu blokady Androida.

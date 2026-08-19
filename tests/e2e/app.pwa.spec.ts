@@ -14,6 +14,11 @@ test('ships push and notification-click handlers in the service worker', async (
   expect(source).toContain("addEventListener('push'")
   expect(source).toContain("addEventListener('notificationclick'")
   expect(source).toContain("url.searchParams.get('view') === 'chat'")
+  expect(source).toContain("badge: '/notification-badge-96.png'")
+
+  const badge = await request.get('/notification-badge-96.png')
+  expect(badge.ok()).toBe(true)
+  expect(badge.headers()['content-type']).toBe('image/png')
 })
 
 test('reopens the cached application shell without a network connection', async ({

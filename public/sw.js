@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'list-up-pwa'
-const APP_SHELL_CACHE = `${CACHE_PREFIX}-shell-v3`
-const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v3`
+const APP_SHELL_CACHE = `${CACHE_PREFIX}-shell-v4`
+const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v4`
 const PRECACHE_URLS = [
   '/',
   '/offline.html',
@@ -8,6 +8,7 @@ const PRECACHE_URLS = [
   '/pwa-icon-192.png',
   '/pwa-icon-512.png',
   '/pwa-icon-maskable-512.png',
+  '/notification-badge-96.png',
   '/apple-icon.png',
 ]
 
@@ -137,7 +138,7 @@ self.addEventListener('push', (event) => {
         tag: payload.tag || 'list-up-chat',
         renotify: true,
         icon: '/pwa-icon-192.png',
-        badge: '/pwa-icon-192.png',
+        badge: '/notification-badge-96.png',
         data: {
           url: payload.url || '/?view=chat',
         },

@@ -114,6 +114,8 @@ test('suppresses push in a focused chat and shows it elsewhere', async () => {
   expect(background.notifications[0].options).toMatchObject({
     body: 'Test message',
     tag: 'list-up-chat',
+    icon: '/pwa-icon-192.png',
+    badge: '/notification-badge-96.png',
   })
 })
 
