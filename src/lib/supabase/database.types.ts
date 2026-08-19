@@ -202,16 +202,19 @@ export type Database = {
       chat_read_state: {
         Row: {
           user_id: string
+          last_delivered_sequence: number | null
           last_read_sequence: number | null
           updated_at: string
         }
         Insert: {
           user_id: string
+          last_delivered_sequence?: number | null
           last_read_sequence?: number | null
           updated_at?: string
         }
         Update: {
           user_id?: string
+          last_delivered_sequence?: number | null
           last_read_sequence?: number | null
           updated_at?: string
         }
@@ -222,6 +225,13 @@ export type Database = {
             isOneToOne: true
             referencedRelation: 'profiles'
             referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'chat_read_state_last_delivered_sequence_fkey'
+            columns: ['last_delivered_sequence']
+            isOneToOne: false
+            referencedRelation: 'chat_messages'
+            referencedColumns: ['sequence']
           },
           {
             foreignKeyName: 'chat_read_state_last_read_sequence_fkey'
@@ -359,6 +369,17 @@ export type Database = {
     Functions: {
       get_chat_unread_count: {
         Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      get_peer_chat_receipt: {
+        Args: Record<PropertyKey, never>
+        Returns: Array<{
+          last_delivered_sequence: number | null
+          last_read_sequence: number | null
+        }>
+      }
+      mark_chat_delivered: {
+        Args: { message_sequence: number }
         Returns: number
       }
       mark_chat_read: {

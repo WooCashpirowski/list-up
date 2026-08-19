@@ -158,6 +158,29 @@ test.describe('chat database security and read cursors', () => {
 
       const { data: unreadBefore } = await second.rpc('get_chat_unread_count')
       expect(Number(unreadBefore)).toBeGreaterThan(0)
+
+      const { data: deliveredSequence, error: deliveryError } = await second.rpc(
+        'mark_chat_delivered',
+        { message_sequence: inserted!.sequence },
+      )
+      expect(deliveryError).toBeNull()
+      expect(Number(deliveredSequence)).toBe(inserted!.sequence)
+
+      const ownDelivery = await first.rpc('mark_chat_delivered', {
+        message_sequence: inserted!.sequence,
+      })
+      expect(ownDelivery.error).not.toBeNull()
+
+      const { data: deliveredReceipt, error: deliveredReceiptError } =
+        await first.rpc('get_peer_chat_receipt')
+      expect(deliveredReceiptError).toBeNull()
+      expect(deliveredReceipt).toEqual([
+        {
+          last_delivered_sequence: inserted!.sequence,
+          last_read_sequence: previousReadState?.last_read_sequence ?? null,
+        },
+      ])
+
       const { data: unreadAfter, error: readError } = await second.rpc(
         'mark_chat_read',
         { message_sequence: secondMessage!.sequence },
@@ -168,15 +191,35 @@ test.describe('chat database security and read cursors', () => {
       await second.rpc('mark_chat_read', { message_sequence: inserted!.sequence })
       const { data: readState } = await second
         .from('chat_read_state')
-        .select('last_read_sequence')
+        .select('last_delivered_sequence, last_read_sequence')
         .single()
       expect(readState?.last_read_sequence).toBe(secondMessage!.sequence)
+      expect(readState?.last_delivered_sequence).toBe(secondMessage!.sequence)
+
+      const { data: readReceipt } = await first.rpc('get_peer_chat_receipt')
+      expect(readReceipt).toEqual([
+        {
+          last_delivered_sequence: secondMessage!.sequence,
+          last_read_sequence: secondMessage!.sequence,
+        },
+      ])
+
+      const { data: monotonicDelivery } = await second.rpc(
+        'mark_chat_delivered',
+        { message_sequence: inserted!.sequence },
+      )
+      expect(Number(monotonicDelivery)).toBe(secondMessage!.sequence)
 
       const { data: privateReadState } = await first
         .from('chat_read_state')
         .select('user_id')
         .eq('user_id', secondUserId)
       expect(privateReadState).toEqual([])
+
+      const anonymousReceipt = await client(anonKey!).rpc(
+        'get_peer_chat_receipt',
+      )
+      expect(anonymousReceipt.error).not.toBeNull()
 
       const { data: events, error: eventError } = await admin
         .from('notification_events')

@@ -228,7 +228,9 @@ Podstawowe polecenia weryfikacyjne:
 - Wiadomość ma UUID generowany po stronie klienta, serwerowy kursor `sequence`, nadawcę, tekst długości 1–2000 znaków i czas utworzenia. Wiadomości nie można edytować ani usuwać przez klienta.
 - Najnowsze 50 wiadomości jest pobierane przy wejściu do widoku, a historia jest ładowana stronami po 50 rekordów za pomocą kursora `sequence`. IndexedDB zachowuje 100 najnowszych wiadomości.
 - Wysłanie działa optymistycznie. Przy braku sieci wiadomość trafia do wspólnego outboxa, pokazuje stan oczekiwania i jest wysyłana w tej samej kolejności po odzyskaniu połączenia. Błąd można ponowić ręcznie.
-- Stan odczytu jest współdzielony między urządzeniami. Kursor zostaje przesunięty dopiero wtedy, gdy najnowsza odebrana wiadomość jest rzeczywiście widoczna w aktywnym czacie.
+- Stan dostarczenia i odczytu jest współdzielony między urządzeniami przez monotoniczne kursory `last_delivered_sequence` oraz `last_read_sequence`. Dostarczenie oznacza faktyczne pobranie wiadomości przez co najmniej jeden klient odbiorcy; odczyt implikuje dostarczenie i następuje dopiero wtedy, gdy najnowsza odebrana wiadomość jest rzeczywiście widoczna w aktywnym czacie.
+- Własna wiadomość pokazuje pojedynczy znacznik po zapisie na serwerze, podwójny po dostarczeniu i wyróżniony podwójny po odczytaniu. Trwały stan jest pobierany przez ograniczone RPC; polityka RLS nadal nie pozwala czytać surowego rekordu `chat_read_state` drugiej osoby.
+- Podczas pisania druga osoba widzi animowane trzy kropki. Zdarzenia są efemeryczne, ograniczone częstotliwościowo i przesyłane przez prywatny kanał Realtime Broadcast `list-up:chat:live`; wskaźnik sam wygasa po bezczynności lub utracie połączenia i nie jest zapisywany w historii.
 - Użytkownik może ustawić `profiles.display_name`; nazwa jest używana przy wiadomościach i w powiadomieniach, z fallbackiem wyprowadzonym z e-maila.
 - Każde urządzenie posiada osobną subskrypcję Web Push. Systemowy prompt jest wyświetlany wyłącznie po kliknięciu użytkownika, a wylogowanie usuwa i anuluje subskrypcję bieżącego urządzenia.
 - Na iOS Web Push wymaga dodania aplikacji do ekranu początkowego i systemu iOS 16.4 lub nowszego. Pozostałe platformy są wykrywane przez dostępność Service Worker, Push API i Notifications API.
@@ -248,6 +250,6 @@ Podstawowe polecenia weryfikacyjne:
 ### 11.2. Testy czatu
 
 - Testy jednostkowe obejmują scalanie i kolejność wiadomości, wpisy optymistyczne, wybór najnowszej odebranej wiadomości oraz skracanie podglądu push.
-- Testy DB obejmują wymuszanie nadawcy, niemutowalność wiadomości, recipienta zdarzenia, prywatność subskrypcji i monotoniczny kursor odczytu.
-- Test dwóch kontekstów przeglądarki obejmuje Realtime, wskaźnik nieprzeczytanych oraz wysłanie wiadomości offline i synchronizację po odzyskaniu sieci.
+- Testy DB obejmują wymuszanie nadawcy, niemutowalność wiadomości, recipienta zdarzenia, prywatność subskrypcji oraz monotoniczne kursory dostarczenia i odczytu.
+- Test dwóch kontekstów przeglądarki obejmuje Realtime, wskaźnik nieprzeczytanych, status dostarczenia i odczytu, sygnał pisania oraz wysłanie wiadomości offline i synchronizację po odzyskaniu sieci.
 - Test PWA obejmuje ochronę dispatchera oraz obecność handlerów `push` i `notificationclick` w Service Workerze.

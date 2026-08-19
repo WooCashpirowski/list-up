@@ -125,11 +125,13 @@ function AuthenticatedApp({ userId }: { userId: string }) {
           isLoadingOlder={chatState.isLoadingOlder}
           hasOlder={chatState.hasOlder}
           error={chatState.error}
+          isPeerTyping={chatState.isPeerTyping}
           push={pushState}
           onSendMessage={chatState.sendMessage}
           onRetryMessage={chatState.retryMessage}
           onLoadOlder={chatState.loadOlder}
           onMarkReadThrough={chatState.markReadThrough}
+          onTypingChange={chatState.setTyping}
           onUpdateDisplayName={profilesState.updateDisplayName}
         />
       )}

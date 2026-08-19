@@ -3,6 +3,7 @@ import type { AppSupabaseClient } from '@/src/lib/supabase/service-client'
 import type {
   CreateChatMessageInput,
   PersistedChatMessage,
+  ChatReceiptState,
 } from '../types/chat.types'
 import { toChatMessage } from './chat.mapper'
 
@@ -63,6 +64,28 @@ export async function getUnreadCount(
 ): Promise<number> {
   const { data } = await supabase.rpc('get_chat_unread_count').throwOnError()
   return Number(data ?? 0)
+}
+
+export async function getPeerReceipt(
+  supabase: AppSupabaseClient,
+): Promise<ChatReceiptState> {
+  const { data } = await supabase.rpc('get_peer_chat_receipt').throwOnError()
+  return (
+    data[0] ?? {
+      last_delivered_sequence: null,
+      last_read_sequence: null,
+    }
+  )
+}
+
+export async function markDeliveredThrough(
+  sequence: number,
+  supabase: AppSupabaseClient,
+): Promise<number> {
+  const { data } = await supabase
+    .rpc('mark_chat_delivered', { message_sequence: sequence })
+    .throwOnError()
+  return Number(data)
 }
 
 export async function markReadThrough(

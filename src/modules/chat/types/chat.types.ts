@@ -2,6 +2,8 @@ export type ChatMessageDeliveryStatus =
   | 'sending'
   | 'queued'
   | 'sent'
+  | 'delivered'
+  | 'read'
   | 'failed'
 
 export type ChatMessage = {
@@ -28,6 +30,24 @@ export type CreateChatMessageInput = {
 
 export type ChatReadState = {
   user_id: string
+  last_delivered_sequence: number | null
   last_read_sequence: number | null
   updated_at: string
+}
+
+export type ChatReceiptState = {
+  last_delivered_sequence: number | null
+  last_read_sequence: number | null
+}
+
+export type ChatReceiptEvent = {
+  user_id: string
+  kind: 'delivered' | 'read'
+  sequence: number
+}
+
+export type ChatTypingEvent = {
+  user_id: string
+  client_id: string
+  is_typing: boolean
 }

@@ -72,6 +72,10 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     await firstPage.getByLabel('Message').fill(onlineMessage)
     await firstPage.getByRole('button', { name: 'Send message' }).click()
     await expect(firstPage.getByText(onlineMessage, { exact: true })).toBeVisible()
+    const firstMessageBubble = firstPage
+      .getByText(onlineMessage, { exact: true })
+      .locator('..')
+    await expect(firstMessageBubble.getByLabel('Delivered')).toBeVisible()
 
     await expect(
       secondPage.getByLabel(/unread chat messages/),
@@ -79,12 +83,18 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     await secondPage.getByRole('button', { name: /Chat/ }).click()
     await expect(secondPage.getByText(onlineMessage, { exact: true })).toBeVisible()
     await expect(secondPage.getByLabel(/unread chat messages/)).toHaveCount(0)
+    await expect(firstMessageBubble.getByLabel('Read')).toBeVisible()
+
+    await secondPage.getByLabel('Message').fill('Typing preview')
+    await expect(firstPage.getByLabel(/is typing/)).toBeVisible()
+    await secondPage.getByLabel('Message').fill('')
+    await expect(firstPage.getByLabel(/is typing/)).toHaveCount(0)
 
     await firstContext.setOffline(true)
     await firstPage.getByLabel('Message').fill(offlineMessage)
     await firstPage.getByRole('button', { name: 'Send message' }).click()
     await expect(firstPage.getByText(offlineMessage, { exact: true })).toBeVisible()
-    await expect(firstPage.getByLabel('queued')).toBeVisible()
+    await expect(firstPage.getByLabel(/queued/i)).toBeVisible()
 
     await firstContext.setOffline(false)
     await expect(secondPage.getByText(offlineMessage, { exact: true })).toBeVisible()

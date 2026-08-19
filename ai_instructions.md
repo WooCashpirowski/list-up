@@ -27,6 +27,7 @@
 - Tabele serwerowe `notification_events` oraz `notification_deliveries` tworzą trwały, rozszerzalny outbox Web Push; klient nie ma do nich dostępu.
 - Row Level Security (RLS) pozwala na dostęp wyłącznie wskazanym adresom email.
 - Auto-usuwanie: Elementy oznaczone jako wykonane znikają z UI po 5 minutach (obsłużone za pomocą lokalnego `setTimeout` oraz czyszczenia bazy w tle).
-- Wiadomości czatu są niemutowalne, stronicowane kursorem `sequence`, synchronizowane przez Realtime i kolejkę offline. Powiadomienia są wysyłane poza transakcją zapisu wiadomości.
+- Wiadomości czatu są niemutowalne, stronicowane kursorem `sequence`, synchronizowane przez Realtime i kolejkę offline. `chat_read_state` utrzymuje monotoniczne kursory `last_delivered_sequence` i `last_read_sequence`; odczyt zawsze implikuje dostarczenie. Powiadomienia są wysyłane poza transakcją zapisu wiadomości.
 - Czat jest dostępny pod `/?view=chat`; cache zachowuje maksymalnie 100 najnowszych wiadomości, a wskaźnik nieprzeczytanych znika dopiero po zobaczeniu najnowszej odebranej wiadomości w widocznym czacie.
+- Efemeryczne potwierdzenia i stan pisania korzystają z autoryzowanego prywatnego kanału Realtime Broadcast `list-up:chat:live`. Stan pisania nie jest zapisywany w bazie, jest ograniczany częstotliwościowo i musi automatycznie wygasać po bezczynności lub rozłączeniu.
 - Dispatcher Web Push działa wyłącznie po stronie serwera z service-role, prywatnym VAPID i sekretem webhooka. Żaden z tych sekretów nie może być eksportowany z publicznego API domeny klienckiej ani używany w zmiennej `NEXT_PUBLIC_*`.

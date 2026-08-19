@@ -30,7 +30,10 @@ import type { PushNotificationState } from '@/src/modules/notifications'
 import { getProfileDisplayName } from '@/src/modules/profiles'
 
 import { getLatestIncomingSequence } from '../model/chat-messages'
-import type { ChatMessage } from '../types/chat.types'
+import type {
+  ChatMessage,
+  ChatMessageDeliveryStatus,
+} from '../types/chat.types'
 
 type ChatParticipant = {
   id: string
@@ -46,11 +49,13 @@ type ChatViewProps = {
   isLoadingOlder: boolean
   hasOlder: boolean
   error: string | null
+  isPeerTyping: boolean
   push: PushNotificationState
   onSendMessage: (body: string) => Promise<boolean>
   onRetryMessage: (id: string) => Promise<void>
   onLoadOlder: () => Promise<void>
   onMarkReadThrough: (sequence: number) => Promise<void>
+  onTypingChange: (isTyping: boolean) => void
   onUpdateDisplayName: (displayName: string) => Promise<boolean>
 }
 
@@ -62,6 +67,7 @@ type MessageBubbleProps = {
   isLatestIncoming: boolean
   latestIncomingRef: React.RefObject<HTMLDivElement | null>
   retryLabel: string
+  statusLabel: string
   onRetry: (id: string) => void
 }
 
@@ -73,6 +79,7 @@ const MessageBubble = memo(function MessageBubble({
   isLatestIncoming,
   latestIncomingRef,
   retryLabel,
+  statusLabel,
   onRetry,
 }: MessageBubbleProps) {
   return (
@@ -103,13 +110,31 @@ const MessageBubble = memo(function MessageBubble({
         >
           <time dateTime={message.created_at}>{time}</time>
           {own && message.delivery_status === 'sent' && (
-            <CheckCheck className="size-3.5" aria-label="sent" />
+            <Check className="size-3.5" aria-label={statusLabel} />
+          )}
+          {own && message.delivery_status === 'delivered' && (
+            <CheckCheck
+              className="size-3.5"
+              aria-label={statusLabel}
+            />
+          )}
+          {own && message.delivery_status === 'read' && (
+            <CheckCheck
+              className="size-3.5 text-sky-200 dark:text-sky-300"
+              aria-label={statusLabel}
+            />
           )}
           {own && message.delivery_status === 'sending' && (
-            <LoaderCircle className="size-3.5 animate-spin" aria-label="sending" />
+            <LoaderCircle
+              className="size-3.5 animate-spin"
+              aria-label={statusLabel}
+            />
           )}
           {own && message.delivery_status === 'queued' && (
-            <Clock3 className="size-3.5" aria-label="queued" />
+            <Clock3
+              className="size-3.5"
+              aria-label={statusLabel}
+            />
           )}
           {own && message.delivery_status === 'failed' && (
             <button
@@ -128,6 +153,27 @@ const MessageBubble = memo(function MessageBubble({
   )
 })
 
+const TypingIndicator = memo(function TypingIndicator({
+  senderName,
+  label,
+}: {
+  senderName: string
+  label: string
+}) {
+  return (
+    <div className="flex justify-start" role="status" aria-label={label}>
+      <div className="surface-card rounded-3xl rounded-bl-lg border border-border bg-card/95 px-4 py-2.5 text-card-foreground">
+        <p className="mb-1 text-xs font-semibold text-primary">{senderName}</p>
+        <span className="flex h-4 items-center gap-1" aria-hidden="true">
+          <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.3s] motion-reduce:animate-none" />
+          <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.15s] motion-reduce:animate-none" />
+          <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground motion-reduce:animate-none" />
+        </span>
+      </div>
+    </div>
+  )
+})
+
 function dateKey(value: string): string {
   const date = new Date(value)
   return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
@@ -141,11 +187,13 @@ export function ChatView({
   isLoadingOlder,
   hasOlder,
   error,
+  isPeerTyping,
   push,
   onSendMessage,
   onRetryMessage,
   onLoadOlder,
   onMarkReadThrough,
+  onTypingChange,
   onUpdateDisplayName,
 }: ChatViewProps) {
   const { locale, t } = useI18n()
@@ -169,6 +217,22 @@ export function ChatView({
         profiles.map((profile) => [profile.id, getProfileDisplayName(profile)]),
       ),
     [profiles],
+  )
+  const peerName = useMemo(() => {
+    const peer = profiles.find(({ id }) => id !== currentUserId)
+    return peer ? getProfileDisplayName(peer) : t('chat.otherPerson')
+  }, [currentUserId, profiles, t])
+  const deliveryLabels = useMemo<
+    Record<Exclude<ChatMessageDeliveryStatus, 'failed'>, string>
+  >(
+    () => ({
+      sending: t('chat.statusSending'),
+      queued: t('chat.statusQueued'),
+      sent: t('chat.statusSent'),
+      delivered: t('chat.statusDelivered'),
+      read: t('chat.statusRead'),
+    }),
+    [t],
   )
 
   const timeFormatter = useMemo(
@@ -224,6 +288,13 @@ export function ChatView({
     previousScrollHeightRef.current = container.scrollHeight
   }, [messages])
 
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    if (isPeerTyping && container && nearBottomRef.current) {
+      container.scrollTop = container.scrollHeight
+    }
+  }, [isPeerTyping])
+
   useEffect(() => {
     const target = latestIncomingRef.current
     if (!target || latestIncomingSequence === null) return
@@ -252,10 +323,18 @@ export function ChatView({
     if (!draft.trim()) return
     const body = draft
     setDraft('')
+    onTypingChange(false)
     const sent = await onSendMessage(body)
     if (!sent) setDraft(body)
     nearBottomRef.current = true
-  }, [draft, onSendMessage])
+  }, [draft, onSendMessage, onTypingChange])
+
+  useEffect(
+    () => () => {
+      onTypingChange(false)
+    },
+    [onTypingChange],
+  )
 
   return (
     <div className="relative mx-auto flex h-dvh w-full max-w-md flex-col">
@@ -337,7 +416,7 @@ export function ChatView({
           <div className="flex h-full items-center justify-center text-muted-foreground">
             <LoaderCircle className="size-6 animate-spin" aria-label={t('chat.loading')} />
           </div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !isPeerTyping ? (
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
             <MessageCircle className="size-10 text-primary/55" />
             <p className="mt-3 font-semibold">{t('chat.empty')}</p>
@@ -370,11 +449,22 @@ export function ChatView({
                     isLatestIncoming={message.sequence === latestIncomingSequence}
                     latestIncomingRef={latestIncomingRef}
                     retryLabel={t('chat.retry')}
+                    statusLabel={
+                      message.delivery_status === 'failed'
+                        ? t('chat.retry')
+                        : deliveryLabels[message.delivery_status]
+                    }
                     onRetry={onRetryMessage}
                   />
                 </div>
               )
             })}
+            {isPeerTyping && (
+              <TypingIndicator
+                senderName={peerName}
+                label={t('chat.typing', { name: peerName })}
+              />
+            )}
           </div>
         )}
       </div>
@@ -411,7 +501,12 @@ export function ChatView({
             rows={1}
             maxLength={2000}
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value
+              setDraft(value)
+              onTypingChange(value.length > 0)
+            }}
+            onBlur={() => onTypingChange(false)}
             onKeyDown={(event) => {
               if (
                 event.key === 'Enter' &&

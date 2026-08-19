@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { getErrorMessage } from '@/src/lib/get-error-message'
 import {
@@ -15,13 +15,30 @@ import {
   synchronizeOutbox,
 } from '@/src/modules/offline'
 
-import { mergeChatMessages } from '../model/chat-messages'
+import type { ChatLiveSession } from '../gateways/chat.gateway'
+import {
+  getLatestIncomingSequence,
+  mergeChatMessages,
+} from '../model/chat-messages'
+import {
+  applyChatReceiptEvent,
+  EMPTY_CHAT_RECEIPT,
+  mergeChatReceipt,
+  resolveChatMessageDeliveryStatus,
+} from '../model/chat-receipts'
 import { reduceChatUnreadCount } from '../model/chat-unread'
 import { createSupabaseChatGateway } from '../services/supabase-chat.gateway'
-import type { ChatMessage } from '../types/chat.types'
+import type {
+  ChatMessage,
+  ChatReceiptState,
+  ChatTypingEvent,
+} from '../types/chat.types'
 
 const PAGE_SIZE = 50
 const CACHE_LIMIT = 100
+const TYPING_HEARTBEAT_MS = 1_500
+const LOCAL_TYPING_IDLE_MS = 2_200
+const REMOTE_TYPING_TIMEOUT_MS = 3_500
 
 export function useChat(userId: string, active: boolean) {
   const gateway = useMemo(() => createSupabaseChatGateway(), [])
@@ -35,6 +52,15 @@ export function useChat(userId: string, active: boolean) {
     new Map<string, { failed: boolean }>(),
   )
   const [hasHydratedCache, setHasHydratedCache] = useState(false)
+  const [peerReceipt, setPeerReceipt] =
+    useState<ChatReceiptState>(EMPTY_CHAT_RECEIPT)
+  const [isPeerTyping, setIsPeerTyping] = useState(false)
+  const liveSessionRef = useRef<ChatLiveSession | null>(null)
+  const lastDeliveredSequenceRef = useRef<number | null>(null)
+  const localTypingActiveRef = useRef(false)
+  const lastTypingBroadcastAtRef = useRef(0)
+  const localTypingIdleTimerRef = useRef<number | null>(null)
+  const remoteTypingClientsRef = useRef(new Map<string, number>())
 
   const refreshUnread = useCallback(async () => {
     if (!isBrowserOnline()) return
@@ -47,6 +73,64 @@ export function useChat(userId: string, active: boolean) {
       setError(getErrorMessage(nextError))
     }
   }, [gateway])
+
+  const refreshPeerReceipt = useCallback(async () => {
+    if (!isBrowserOnline()) return
+    try {
+      const receipt = await gateway.getPeerReceipt()
+      setPeerReceipt((current) => mergeChatReceipt(current, receipt))
+    } catch (nextError) {
+      setError(getErrorMessage(nextError))
+    }
+  }, [gateway])
+
+  const acknowledgeDelivery = useCallback(
+    async (sequence: number): Promise<void> => {
+      if (
+        !isBrowserOnline() ||
+        (lastDeliveredSequenceRef.current !== null &&
+          sequence <= lastDeliveredSequenceRef.current)
+      ) {
+        return
+      }
+
+      try {
+        const deliveredSequence = await gateway.markDeliveredThrough(sequence)
+        lastDeliveredSequenceRef.current = Math.max(
+          lastDeliveredSequenceRef.current ?? 0,
+          deliveredSequence,
+        )
+        await liveSessionRef.current?.publishReceipt({
+          kind: 'delivered',
+          sequence: deliveredSequence,
+        })
+      } catch (nextError) {
+        setError(getErrorMessage(nextError))
+      }
+    },
+    [gateway],
+  )
+
+  const handlePeerTyping = useCallback(
+    (event: ChatTypingEvent) => {
+      if (event.user_id === userId) return
+      const existingTimer = remoteTypingClientsRef.current.get(event.client_id)
+      if (existingTimer !== undefined) {
+        window.clearTimeout(existingTimer)
+        remoteTypingClientsRef.current.delete(event.client_id)
+      }
+
+      if (event.is_typing) {
+        const timer = window.setTimeout(() => {
+          remoteTypingClientsRef.current.delete(event.client_id)
+          setIsPeerTyping(remoteTypingClientsRef.current.size > 0)
+        }, REMOTE_TYPING_TIMEOUT_MS)
+        remoteTypingClientsRef.current.set(event.client_id, timer)
+      }
+      setIsPeerTyping(remoteTypingClientsRef.current.size > 0)
+    },
+    [userId],
+  )
 
   const refreshOutbox = useCallback(async () => {
     try {
@@ -72,6 +156,10 @@ export function useChat(userId: string, active: boolean) {
     try {
       const latest = await gateway.getLatestMessages(PAGE_SIZE)
       setMessages((current) => mergeChatMessages(current, latest))
+      const latestIncomingSequence = getLatestIncomingSequence(latest, userId)
+      if (latestIncomingSequence !== null) {
+        void acknowledgeDelivery(latestIncomingSequence)
+      }
       setHasOlder(latest.length === PAGE_SIZE)
       setError(null)
     } catch (nextError) {
@@ -79,10 +167,11 @@ export function useChat(userId: string, active: boolean) {
     } finally {
       setIsLoading(false)
     }
-  }, [gateway])
+  }, [acknowledgeDelivery, gateway, userId])
 
   useEffect(() => {
     let mounted = true
+    const remoteTypingClients = remoteTypingClientsRef.current
     void getCachedCollection<ChatMessage>(userId, 'chat-messages')
       .then((cached) => {
         if (mounted && cached) setMessages(cached)
@@ -97,20 +186,30 @@ export function useChat(userId: string, active: boolean) {
     const initialRefresh = window.requestAnimationFrame(() => {
       void refreshOutbox()
       void refreshUnread()
+      void refreshPeerReceipt()
     })
 
-    const unsubscribe = gateway.subscribe(userId, {
+    const liveSession = gateway.subscribe(userId, {
+      onConnected: () => void refreshPeerReceipt(),
       onMessage: (message) => {
         setMessages((current) => mergeChatMessages(current, [message]))
         if (message.sender_id !== userId) {
           setUnreadCount((current) =>
             reduceChatUnreadCount(current, { type: 'incoming' }),
           )
+          void acknowledgeDelivery(message.sequence)
           void refreshUnread()
         }
       },
       onReadState: () => void refreshUnread(),
+      onReceipt: (receipt) => {
+        if (receipt.user_id !== userId) {
+          setPeerReceipt((current) => applyChatReceiptEvent(current, receipt))
+        }
+      },
+      onTyping: handlePeerTyping,
     })
+    liveSessionRef.current = liveSession
 
     const handleOutbox = () => void refreshOutbox()
     const handleSynced = () => {
@@ -124,12 +223,29 @@ export function useChat(userId: string, active: boolean) {
     return () => {
       mounted = false
       window.cancelAnimationFrame(initialRefresh)
-      unsubscribe()
+      liveSessionRef.current = null
+      liveSession.unsubscribe()
+      if (localTypingIdleTimerRef.current !== null) {
+        window.clearTimeout(localTypingIdleTimerRef.current)
+      }
+      for (const timer of remoteTypingClients.values()) {
+        window.clearTimeout(timer)
+      }
+      remoteTypingClients.clear()
       window.removeEventListener(OUTBOX_CHANGED_EVENT, handleOutbox)
       window.removeEventListener(OUTBOX_STATUS_EVENT, handleOutbox)
       window.removeEventListener(OUTBOX_SYNCED_EVENT, handleSynced)
     }
-  }, [gateway, refreshLatest, refreshOutbox, refreshUnread, userId])
+  }, [
+    acknowledgeDelivery,
+    gateway,
+    handlePeerTyping,
+    refreshLatest,
+    refreshOutbox,
+    refreshPeerReceipt,
+    refreshUnread,
+    userId,
+  ])
 
   useEffect(() => {
     if (!active) return
@@ -140,11 +256,12 @@ export function useChat(userId: string, active: boolean) {
   useEffect(() => {
     const handleFocus = () => {
       void refreshUnread()
+      void refreshPeerReceipt()
       if (active) void refreshLatest()
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
-  }, [active, refreshLatest, refreshUnread])
+  }, [active, refreshLatest, refreshPeerReceipt, refreshUnread])
 
   useEffect(() => {
     if (!hasHydratedCache) return
@@ -168,10 +285,54 @@ export function useChat(userId: string, active: boolean) {
         if (message.sequence === null && message.delivery_status !== 'failed') {
           return { ...message, delivery_status: 'sending' }
         }
-        return message
+        return {
+          ...message,
+          delivery_status: resolveChatMessageDeliveryStatus(
+            message,
+            userId,
+            peerReceipt,
+          ),
+        }
       }),
-    [messages, outboxState],
+    [messages, outboxState, peerReceipt, userId],
   )
+
+  const setTyping = useCallback((isTyping: boolean): void => {
+    if (localTypingIdleTimerRef.current !== null) {
+      window.clearTimeout(localTypingIdleTimerRef.current)
+      localTypingIdleTimerRef.current = null
+    }
+
+    if (!isTyping) {
+      if (localTypingActiveRef.current) {
+        localTypingActiveRef.current = false
+        lastTypingBroadcastAtRef.current = 0
+        void liveSessionRef.current?.setTyping(false)
+      }
+      return
+    }
+
+    const now = Date.now()
+    if (
+      !localTypingActiveRef.current ||
+      now - lastTypingBroadcastAtRef.current >= TYPING_HEARTBEAT_MS
+    ) {
+      localTypingActiveRef.current = true
+      lastTypingBroadcastAtRef.current = now
+      void liveSessionRef.current?.setTyping(true)
+    }
+
+    localTypingIdleTimerRef.current = window.setTimeout(() => {
+      localTypingActiveRef.current = false
+      lastTypingBroadcastAtRef.current = 0
+      localTypingIdleTimerRef.current = null
+      void liveSessionRef.current?.setTyping(false)
+    }, LOCAL_TYPING_IDLE_MS)
+  }, [])
+
+  useEffect(() => {
+    if (!active) setTyping(false)
+  }, [active, setTyping])
 
   const sendMessage = useCallback(
     async (body: string): Promise<boolean> => {
@@ -305,9 +466,17 @@ export function useChat(userId: string, active: boolean) {
       if (document.visibilityState !== 'visible') return
       try {
         const remaining = await gateway.markReadThrough(sequence)
+        lastDeliveredSequenceRef.current = Math.max(
+          lastDeliveredSequenceRef.current ?? 0,
+          sequence,
+        )
         setUnreadCount((current) =>
           reduceChatUnreadCount(current, { type: 'read', remaining }),
         )
+        await liveSessionRef.current?.publishReceipt({
+          kind: 'read',
+          sequence,
+        })
       } catch (nextError) {
         setError(getErrorMessage(nextError))
       }
@@ -322,9 +491,11 @@ export function useChat(userId: string, active: boolean) {
     isLoadingOlder,
     hasOlder,
     error,
+    isPeerTyping,
     sendMessage,
     retryMessage,
     loadOlder,
     markReadThrough,
+    setTyping,
   }
 }
