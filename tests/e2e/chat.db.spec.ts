@@ -41,6 +41,38 @@ async function signIn(
 test.describe('chat database security and read cursors', () => {
   test.skip(!hasChatTestConfig, 'Set both allowlisted users and a test service role')
 
+  test('preserves push subscription ownership during service-role bookkeeping', async () => {
+    const userClient = client(anonKey!)
+    const admin = client(serviceRoleKey!)
+    const endpoint = `https://push.invalid/${crypto.randomUUID()}`
+
+    try {
+      const user = await signIn(userClient, secondEmail!, secondPassword!)
+      const { data: subscription, error: insertError } = await userClient
+        .from('push_subscriptions')
+        .insert({ endpoint, p256dh: 'test-p256dh', auth: 'test-auth' })
+        .select('id, user_id')
+        .single()
+      expect(insertError).toBeNull()
+      expect(subscription?.user_id).toBe(user.id)
+
+      const successAt = new Date().toISOString()
+      const { data: updated, error: updateError } = await admin
+        .from('push_subscriptions')
+        .update({ last_success_at: successAt, is_active: true })
+        .eq('id', subscription!.id)
+        .select('user_id, last_success_at')
+        .single()
+
+      expect(updateError).toBeNull()
+      expect(updated?.user_id).toBe(user.id)
+      expect(updated?.last_success_at).toBe(successAt)
+    } finally {
+      await admin.from('push_subscriptions').delete().eq('endpoint', endpoint)
+      await userClient.auth.signOut()
+    }
+  })
+
   test('creates an immutable message, notifies only its recipient, and advances unread state', async () => {
     const first = client(anonKey!)
     const second = client(anonKey!)

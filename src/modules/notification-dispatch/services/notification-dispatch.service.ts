@@ -73,6 +73,58 @@ async function updateDelivery(
     .throwOnError()
 }
 
+async function recordPushFailure(
+  client: SupabaseClient<Database>,
+  delivery: ClaimedDelivery,
+  error: unknown,
+): Promise<'retried' | 'dead'> {
+  const statusCode = getStatusCode(error)
+  const decision = decidePushFailure(statusCode, delivery.attempt_number)
+
+  if (decision.deactivateSubscription) {
+    await client
+      .from('notification_deliveries')
+      .update({
+        status: 'dead',
+        lease_until: null,
+        last_status_code: statusCode,
+        last_error: 'Push subscription expired',
+      })
+      .eq('subscription_id', delivery.subscription_id)
+      .in('status', ['pending', 'retry', 'processing'])
+      .throwOnError()
+
+    try {
+      await client
+        .from('push_subscriptions')
+        .update({ is_active: false })
+        .eq('id', delivery.subscription_id)
+        .throwOnError()
+    } catch (bookkeepingError) {
+      console.error(
+        'Could not deactivate an expired push subscription',
+        bookkeepingError,
+      )
+    }
+
+    return 'dead'
+  }
+
+  await updateDelivery(client, delivery.delivery_id, {
+    status: decision.status,
+    next_attempt_at: decision.retryAfterSeconds
+      ? new Date(
+          Date.now() + decision.retryAfterSeconds * 1000,
+        ).toISOString()
+      : new Date().toISOString(),
+    lease_until: null,
+    last_status_code: statusCode,
+    last_error: getErrorMessage(error),
+  })
+
+  return decision.status === 'retry' ? 'retried' : 'dead'
+}
+
 async function deliver(
   client: SupabaseClient<Database>,
   delivery: ClaimedDelivery,
@@ -96,8 +148,9 @@ async function deliver(
     url: '/?view=chat',
   })
 
+  let response: Awaited<ReturnType<typeof webPush.sendNotification>>
   try {
-    const response = await webPush.sendNotification(
+    response = await webPush.sendNotification(
       {
         endpoint: delivery.endpoint,
         keys: {
@@ -111,62 +164,33 @@ async function deliver(
         urgency: 'high',
       },
     )
-
-    const now = new Date().toISOString()
-    await Promise.all([
-      updateDelivery(client, delivery.delivery_id, {
-        status: 'sent',
-        sent_at: now,
-        lease_until: null,
-        last_status_code: response.statusCode,
-        last_error: null,
-      }),
-      client
-        .from('push_subscriptions')
-        .update({ last_success_at: now, is_active: true })
-        .eq('id', delivery.subscription_id)
-        .throwOnError(),
-    ])
-    return 'sent'
   } catch (error) {
-    const statusCode = getStatusCode(error)
-    const decision = decidePushFailure(statusCode, delivery.attempt_number)
-
-    if (decision.deactivateSubscription) {
-      await Promise.all([
-        client
-          .from('push_subscriptions')
-          .update({ is_active: false })
-          .eq('id', delivery.subscription_id)
-          .throwOnError(),
-        client
-          .from('notification_deliveries')
-          .update({
-            status: 'dead',
-            lease_until: null,
-            last_status_code: statusCode,
-            last_error: 'Push subscription expired',
-          })
-          .eq('subscription_id', delivery.subscription_id)
-          .in('status', ['pending', 'retry', 'processing'])
-          .throwOnError(),
-      ])
-    }
-
-    await updateDelivery(client, delivery.delivery_id, {
-      status: decision.status,
-      next_attempt_at: decision.retryAfterSeconds
-        ? new Date(
-            Date.now() + decision.retryAfterSeconds * 1000,
-          ).toISOString()
-        : new Date().toISOString(),
-      lease_until: null,
-      last_status_code: statusCode,
-      last_error: getErrorMessage(error),
-    })
-
-    return decision.status === 'retry' ? 'retried' : 'dead'
+    return recordPushFailure(client, delivery, error)
   }
+
+  const now = new Date().toISOString()
+  await updateDelivery(client, delivery.delivery_id, {
+    status: 'sent',
+    sent_at: now,
+    lease_until: null,
+    last_status_code: response.statusCode,
+    last_error: null,
+  })
+
+  try {
+    await client
+      .from('push_subscriptions')
+      .update({ last_success_at: now, is_active: true })
+      .eq('id', delivery.subscription_id)
+      .throwOnError()
+  } catch (bookkeepingError) {
+    console.error(
+      'Push was sent, but subscription metadata could not be updated',
+      bookkeepingError,
+    )
+  }
+
+  return 'sent'
 }
 
 export async function dispatchPendingNotifications(): Promise<DispatchSummary> {
