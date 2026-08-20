@@ -31,7 +31,7 @@ export function OfflineStatus({ state }: { state: OfflineSyncState }) {
     <div
       role="status"
       className={cn(
-        'surface-glass fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-md items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium backdrop-blur-xl',
+        'surface-glass pointer-events-none fixed inset-x-4 bottom-24 z-40 mx-auto flex max-w-md items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium backdrop-blur-xl',
         tone,
       )}
     >

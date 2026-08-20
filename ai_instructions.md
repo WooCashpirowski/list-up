@@ -22,6 +22,13 @@
 - Oddziel stan lokalny (dla płynności drag'n'drop, wyszukiwania kategorii) od stanu synchronizowanego przez Supabase Realtime.
 - Mutacje (dodawanie, oznaczanie jako wykonane, usuwanie) muszą używać wzorca Optimistic UI – interfejs reaguje natychmiast, synchronizacja z bazą zachodzi w tle.
 
+## Środowiska i wdrożenia
+- `main` zasila produkcyjny projekt Vercel i produkcyjny projekt Supabase.
+- `staging` zasila osobny projekt Vercel `list-up-staging`, którego Production Branch wskazuje na `staging`, oraz osobny projekt Supabase utworzony jako bezpieczna kopia produkcji.
+- Zmienne Supabase, service-role, para VAPID, sekret webhooka i wpisy Vault muszą być odseparowane między produkcją i stagingiem. Testy integracyjne nigdy nie mogą wskazywać produkcji.
+- Publiczny URL dispatchera zapisany w Supabase Vault musi być stałym adresem HTTPS stagingowego wdrożenia; `localhost` ani jednorazowy URL deploymentu nie są poprawnymi celami.
+- Procedura utrzymania i odtworzenia środowiska znajduje się w [docs/staging.md](docs/staging.md).
+
 ## Baza Danych i Logika (Supabase)
 - Tabele aplikacyjne: `profiles` (z `display_name`), `lists`, `categories`, `list_items`, `chat_messages`, `chat_read_state` i `push_subscriptions`.
 - Tabele serwerowe `notification_events` oraz `notification_deliveries` tworzą trwały, rozszerzalny outbox Web Push; klient nie ma do nich dostępu.

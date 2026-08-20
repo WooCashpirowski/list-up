@@ -18,6 +18,15 @@ Aplikacja działa w modelu offline-ready: po wcześniejszym uruchomieniu online 
 - next-themes do obsługi motywu
 - Playwright do testów jednostkowych modeli oraz testów E2E interfejsu, PWA i bazy danych
 
+### 2.1. Środowiska uruchomieniowe
+
+- Produkcja: branch `main`, produkcyjny projekt Vercel i produkcyjny projekt Supabase.
+- Staging: długowieczny branch `staging`, osobny projekt Vercel `list-up-staging` oraz osobny projekt Supabase z kopią danych potrzebnych do testów.
+- Projekt Vercel stagingu traktuje `staging` jako swój Production Branch. Zapewnia to stały publiczny adres HTTPS bez płatnego Vercel Custom Environment i bez zależności od chronionych adresów Preview.
+- Każde środowisko ma własne klucze Supabase, service-role, parę VAPID, sekret webhooka i sekrety Vault. Staging może zawierać kontrolowaną kopię danych aplikacyjnych, ale nie używa produkcyjnych sekretów, subskrypcji push ani danych outboxa.
+- Zmiany są promowane przez `feature/*` → `staging` → `main`. Poprawki wykonane bezpośrednio na `main` muszą zostać przeniesione z powrotem do `staging`.
+- Szczegółowy runbook znajduje się w [docs/staging.md](docs/staging.md).
+
 ## 3. Architektura aplikacji
 
 Kod jest podzielony domenowo w katalogu `src/modules`. Główne moduły to:
@@ -242,10 +251,11 @@ Podstawowe polecenia weryfikacyjne:
 
 ### 11.1. Sekrety i wdrożenie
 
-- Vercel: `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NOTIFICATION_WEBHOOK_SECRET`.
-- Supabase Vault: `notification_dispatch_url` wskazujący produkcyjny `/api/notifications/dispatch` oraz `notification_webhook_secret` o wartości zgodnej z Vercel.
-- Klucze VAPID są generowane jeden raz. Prywatny VAPID i service-role nie mogą trafić do repozytorium ani bundla klienta.
-- Kolejność wdrożenia: wygenerować VAPID i skonfigurować sekrety Vercel, wdrożyć dispatcher, zapisać URL i sekret w Vault, uruchomić migrację tworzącą webhook oraz zadania cron, a na końcu wdrożyć klienta i Service Worker.
+- Każdy projekt Vercel otrzymuje właściwe dla swojego środowiska `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` i `NOTIFICATION_WEBHOOK_SECRET`.
+- Każdy projekt Supabase przechowuje w Vault `notification_dispatch_url` wskazujący stały publiczny URL własnego `/api/notifications/dispatch` oraz `notification_webhook_secret` o wartości identycznej z `NOTIFICATION_WEBHOOK_SECRET` odpowiedniego wdrożenia Vercel.
+- Para VAPID jest generowana raz i pozostaje stała w obrębie środowiska. Produkcja i staging używają osobnych par. Prywatny VAPID, service-role i sekret webhooka nie mogą trafić do repozytorium ani bundla klienta.
+- Kolejność wdrożenia: skonfigurować Supabase i Auth, wygenerować VAPID oraz sekret webhooka, ustawić zmienne Vercel, wdrożyć dispatcher, zweryfikować chroniony endpoint, zapisać URL i sekret w Vault, a dopiero potem włączyć cron retry. Trigger webhooka jest instalowany przez migrację i pozostaje bezczynny bez kompletu wpisów Vault.
+- `notification_dispatch_url` nie może wskazywać `localhost` ani adresu wymagającego interaktywnego logowania do Vercel.
 - Akceptacja mobilna obejmuje iPhone 11 z iOS 16.4+ po instalacji na ekranie początkowym oraz Samsung S24FE. Zgoda na powiadomienia musi być inicjowana bezpośrednim kliknięciem użytkownika.
 
 ### 11.2. Testy czatu

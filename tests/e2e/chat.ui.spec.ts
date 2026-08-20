@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { Database } from '@/src/lib/supabase/database.types'
 
+import { waitForRealtimeSubscription } from './realtime'
+
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const serviceRoleKey = process.env.E2E_SUPABASE_SERVICE_ROLE_KEY
@@ -50,10 +52,19 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     | null = null
 
   try {
+    const firstRealtimeReady = waitForRealtimeSubscription(
+      firstPage,
+      'list-up:chat:live',
+    )
+    const secondRealtimeReady = waitForRealtimeSubscription(
+      secondPage,
+      'list-up:chat:live',
+    )
     await Promise.all([
       signIn(firstPage, firstEmail!, firstPassword!),
       signIn(secondPage, secondEmail!, secondPassword!),
     ])
+    await Promise.all([firstRealtimeReady, secondRealtimeReady])
     const { data: secondProfile } = await admin
       .from('profiles')
       .select('id')
@@ -69,7 +80,9 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
 
     await firstPage.getByRole('button', { name: 'Chat', exact: true }).click()
     await expect(firstPage.getByRole('heading', { name: 'Chat' })).toBeVisible()
-    await firstPage.getByLabel('Message').fill(onlineMessage)
+    await firstPage
+      .getByRole('textbox', { name: 'Message', exact: true })
+      .fill(onlineMessage)
     await firstPage.getByRole('button', { name: 'Send message' }).click()
     await expect(firstPage.getByText(onlineMessage, { exact: true })).toBeVisible()
     const firstMessageBubble = firstPage
@@ -85,13 +98,19 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     await expect(secondPage.getByLabel(/unread chat messages/)).toHaveCount(0)
     await expect(firstMessageBubble.getByLabel('Read')).toBeVisible()
 
-    await secondPage.getByLabel('Message').fill('Typing preview')
+    await secondPage
+      .getByRole('textbox', { name: 'Message', exact: true })
+      .fill('Typing preview')
     await expect(firstPage.getByLabel(/is typing/)).toBeVisible()
-    await secondPage.getByLabel('Message').fill('')
+    await secondPage
+      .getByRole('textbox', { name: 'Message', exact: true })
+      .fill('')
     await expect(firstPage.getByLabel(/is typing/)).toHaveCount(0)
 
     await firstContext.setOffline(true)
-    await firstPage.getByLabel('Message').fill(offlineMessage)
+    await firstPage
+      .getByRole('textbox', { name: 'Message', exact: true })
+      .fill(offlineMessage)
     await firstPage.getByRole('button', { name: 'Send message' }).click()
     await expect(firstPage.getByText(offlineMessage, { exact: true })).toBeVisible()
     await expect(firstPage.getByLabel(/queued/i)).toBeVisible()

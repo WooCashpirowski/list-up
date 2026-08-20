@@ -66,7 +66,7 @@ test.describe('chat database security and read cursors', () => {
 
       expect(updateError).toBeNull()
       expect(updated?.user_id).toBe(user.id)
-      expect(updated?.last_success_at).toBe(successAt)
+      expect(new Date(updated!.last_success_at!).toISOString()).toBe(successAt)
     } finally {
       await admin.from('push_subscriptions').delete().eq('endpoint', endpoint)
       await userClient.auth.signOut()

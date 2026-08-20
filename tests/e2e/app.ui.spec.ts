@@ -3,6 +3,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test'
 
 import type { Database } from '@/src/lib/supabase/database.types'
 
+import { waitForRealtimeSubscription } from './realtime'
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const testEmail = process.env.E2E_TEST_EMAIL
@@ -666,10 +668,9 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     const itemName = `Playwright Realtime item ${suffix}`
     cleanupListTitles.add(listTitle)
 
+    const realtimeReady = waitForRealtimeSubscription(page, 'lists:')
     await signInViaUi(page)
-    // The initial data fetch completes before My Lists is rendered; allow the
-    // channel join acknowledgement to arrive before creating the remote row.
-    await page.waitForTimeout(500)
+    await realtimeReady
 
     const { data: list, error: listError } = await client
       .from('lists')

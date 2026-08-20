@@ -5,6 +5,10 @@
 Copy `.env.test.example` to `.env.test.local` and provide a Supabase Auth
 account included in the database allowlist. `.env.test.local` is ignored by
 Git. Variables already present in `.env.local` do not need to be duplicated.
+Both files must point to the staging Supabase project. Never run the database
+or browser E2E suites against production. See the
+[staging runbook](../../docs/staging.md) for the environment topology and
+verification checklist.
 
 The suite verifies login/logout, UI CRUD, persistence, relational CRUD,
 database triggers, anonymous access denial, and category search. Every mutated
