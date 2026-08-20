@@ -76,6 +76,23 @@ $$;
 
 Sekrety VAPID i webhooka są potrzebne lokalnie tylko podczas świadomego testowania dispatchera. Zdalny Supabase nie wywoła `http://localhost:3000`; do pełnego testu Web Push należy użyć wdrożonego stagingu.
 
+## Użytkownicy stagingowi
+
+Allowlista jest przechowywana w `private.allowed_user_emails`, dzięki czemu produkcja i staging mogą używać innych adresów bez rozbieżności schematu. Migracja tworząca tabelę inicjalizuje ją z istniejących profili, więc samo zastosowanie migracji nie zmienia dostępu.
+
+Po migracji skopiuj zawartość `supabase/scripts/configure_staging_allowed_emails.sql` do SQL Editora stagingowego projektu, zastąp oba placeholdery adresami testowymi i uruchom skrypt. Nie zapisuj rzeczywistych adresów w śledzonym pliku.
+
+Nie dodawaj nowych użytkowników obok sklonowanych kont. Aplikacja zakłada dwóch uczestników, a dodatkowe profile zaburzyłyby wybór odbiorcy czatu i powiadomień. Jeżeli historia czatu nie jest potrzebna, wyczyść czat, read state, push i outbox, usuń sklonowanych użytkowników przez Supabase Auth, a następnie utwórz dwa nowe, potwierdzone konta odpowiadające stagingowej allowliście.
+
+Po ustawieniu nowych adresów w allowliście, ale przed utworzeniem nowych kont Auth, uruchom w stagingowym SQL Editorze `supabase/scripts/reset_staging_identity_data.sql`. Skrypt usuwa dane w jednej transakcji i odmawia działania, jeśli allowlista nadal pasuje do istniejącego użytkownika Auth. Następnie:
+
+1. Upewnij się, że migracja `20260820130000_allow_system_created_by_cleanup.sql` jest zastosowana. Pozwala ona wewnętrznym akcjom `ON DELETE SET NULL` wyczyścić audytowe `created_by`, nadal blokując zmianę tego pola przez klienta.
+2. Usuń sklonowanych użytkowników w **Authentication → Users**. Nie usuwaj rekordów `auth.users` bezpośrednim SQL-em.
+3. Sprawdź, czy stare rekordy `public.profiles` zniknęły kaskadowo. Zachowane listy, kategorie i elementy pozostają, a ich `created_by` zmienia się na `null`.
+4. Utwórz dokładnie dwa nowe konta z adresami z allowlisty, silnymi hasłami stagingowymi i potwierdzonym e-mailem. Trigger utworzy odpowiadające profile.
+5. Zaktualizuj `E2E_TEST_EMAIL`, `E2E_TEST_PASSWORD`, `E2E_SECOND_USER_EMAIL` i `E2E_SECOND_USER_PASSWORD` w ignorowanym `.env.test.local`.
+6. Usuń lokalną sesję i cache witryny stagingowej, zaloguj się ponownie i uruchom pełną weryfikację.
+
 ## Ręczne odtworzenie bazy na Free Plan
 
 Free Plan nie udostępnia operacji „restore to a new project”, dlatego staging jest odtwarzany logicznym dumpem i restore.
