@@ -41,7 +41,7 @@ Na potrzeby dispatchera Supabase Vault przechowuje dwa wpisy:
 
 | Nazwa                         | Wartość                                                           |
 | ----------------------------- | ----------------------------------------------------------------- |
-| `notification_dispatch_url`   | `https://<staging-domain>/api/notifications/dispatch`             |
+| `notification_dispatch_url`   | `https://list-up-staging.vercel.app/api/notifications/dispatch`   |
 | `notification_webhook_secret` | identyczna jak `NOTIFICATION_WEBHOOK_SECRET` w stagingowym Vercel |
 
 Cron `dispatch-pending-notifications` pozostaje wyłączony, dopóki endpoint nie zostanie wdrożony, a oba wpisy Vault nie zostaną ustawione i zweryfikowane. Pozostałe bezpieczne zadania (`delete-expired-list-items` i `cleanup-notification-history`) mogą działać niezależnie.
@@ -69,6 +69,46 @@ begin
 end;
 $$;
 ```
+
+## Weryfikacja Web Push
+
+Po wdrożeniu endpointu i włączeniu crona wykonaj test między dwoma kontami na
+różnych urządzeniach lub w różnych profilach przeglądarki:
+
+1. Na koncie odbiorcy włącz powiadomienia i zaakceptuj zgodę przeglądarki.
+2. Zamknij kartę z czatem albo pozostaw ją w tle.
+3. Z drugiego konta wyślij pojedynczą, rozpoznawalną wiadomość.
+4. Sprawdź wyświetlenie powiadomienia i przejście do czatu po jego kliknięciu.
+
+Powiadomienie jest celowo pomijane, gdy czat odbiorcy jest aktywny na pierwszym
+planie. Kolejne powiadomienia czatu używają wspólnego tagu i mogą zastępować się
+w systemowym centrum powiadomień.
+
+Czas obsługi po stronie serwera można sprawdzić bez odczytywania treści wiadomości:
+
+```sql
+select
+  event.created_at as event_created_at,
+  delivery.status,
+  delivery.attempts,
+  delivery.last_status_code,
+  delivery.last_error,
+  delivery.sent_at,
+  round(
+    extract(epoch from (delivery.sent_at - event.created_at))::numeric,
+    2
+  ) as dispatch_seconds
+from public.notification_deliveries as delivery
+join public.notification_events as event
+  on event.id = delivery.event_id
+order by event.created_at desc
+limit 20;
+```
+
+Typowy udany wynik to `status = 'sent'`, `attempts = 1`, brak `last_error` i
+czas poniżej kilku sekund. Status `201` oznacza, że zewnętrzna usługa Web Push
+przyjęła powiadomienie; nie gwarantuje chwili jego wyświetlenia przez system
+operacyjny urządzenia.
 
 ## Lokalna konfiguracja
 
