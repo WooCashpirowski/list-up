@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 import type { Database } from '@/src/lib/supabase/database.types'
 
-import { waitForRealtimeSubscription } from './realtime'
+import { observeRealtimeSubscriptions } from './realtime'
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -46,6 +46,8 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
   const firstPage = await firstContext.newPage()
   const secondPage = await secondContext.newPage()
   const thirdPage = await thirdContext.newPage()
+  const firstRealtime = observeRealtimeSubscriptions(firstPage)
+  const secondRealtime = observeRealtimeSubscriptions(secondPage)
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
   const onlineMessage = `Realtime chat ${suffix}`
   const offlineMessage = `Offline chat ${suffix}`
@@ -91,8 +93,7 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
 
     await firstPage.getByRole('button', { name: 'Chat', exact: true }).click()
     await expect(firstPage.getByRole('heading', { name: 'Chat' })).toBeVisible()
-    const firstRealtimeReady = waitForRealtimeSubscription(
-      firstPage,
+    const firstRealtimeReady = firstRealtime.waitForSubscription(
       `list-up:chat:${conversationId}:live`,
     )
     await firstPage
@@ -111,15 +112,36 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     const firstMessageBubble = firstPage
       .getByText(onlineMessage, { exact: true })
       .locator('..')
-    await expect(firstMessageBubble.getByLabel('Delivered')).toBeVisible()
+    await test.step('updates the sender bubble after recipient delivery', async () => {
+      try {
+        await expect(firstMessageBubble.getByLabel('Delivered')).toBeVisible()
+      } catch (error) {
+        const { data: sentMessage } = await admin
+          .from('chat_messages')
+          .select('sequence')
+          .eq('conversation_id', conversationId!)
+          .eq('body', onlineMessage)
+          .maybeSingle()
+        const { data: recipientReceipt } = await admin
+          .from('chat_read_state')
+          .select('last_delivered_sequence, last_read_sequence')
+          .eq('conversation_id', conversationId!)
+          .eq('user_id', secondUserId!)
+          .maybeSingle()
+        await test.info().attach('delivery-receipt-diagnostic', {
+          body: Buffer.from(JSON.stringify({ sentMessage, recipientReceipt })),
+          contentType: 'application/json',
+        })
+        throw error
+      }
+    })
 
     await expect(
       secondPage.getByLabel(/unread chat messages/),
     ).toBeVisible()
     await expect(thirdPage.getByLabel(/unread chat messages/)).toHaveCount(0)
     await secondPage.getByRole('button', { name: /Chat/ }).click()
-    const secondRealtimeReady = waitForRealtimeSubscription(
-      secondPage,
+    const secondRealtimeReady = secondRealtime.waitForSubscription(
       `list-up:chat:${conversationId}:live`,
     )
     await secondPage
@@ -156,6 +178,8 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     await firstContext.setOffline(false)
     await expect(secondPage.getByText(offlineMessage, { exact: true })).toBeVisible()
   } finally {
+    firstRealtime.dispose()
+    secondRealtime.dispose()
     const { data: messages } = await admin
       .from('chat_messages')
       .select('id')

@@ -139,11 +139,30 @@ Nie usuwaj istniejących użytkowników z historią czatu podczas zwykłego wdro
 
 Pierwsza migracja czatu zawierała konflikt nazwy zmiennej `recipient_id` z kolumną tabeli w triggerze powiadomień. Błąd PostgreSQL `42702` przerywał całą transakcję zapisu wiadomości. Naprawa zastępuje wyłącznie funkcję triggera, bez usuwania historii i bez zmiany RLS.
 
-1. W katalogu projektu uruchom `npx.cmd supabase db push --linked --dry-run`. Jeżeli poprzednia migracja jest już zastosowana, plan powinien wskazać tylko `20260917120000_fix_chat_notification_recipient.sql`.
+1. W katalogu projektu uruchom `npx.cmd supabase db push --linked --dry-run`. Jeżeli poprzednia migracja jest już zastosowana, plan powinien zawierać `20260917120000_fix_chat_notification_recipient.sql` oraz późniejsze migracje, jeśli nie zostały jeszcze zastosowane.
 2. Uruchom `npx.cmd supabase db push --linked`.
 3. Wdróż aktualną wersję aplikacji. Obsługa błędów odczytuje teraz również pole `message` ze zwykłych obiektów błędów Supabase, zamiast zastępować je ogólnym komunikatem.
 4. Odśwież aplikację na obu kontach testowych i wyślij po jednej wiadomości w dotychczasowej rozmowie. Sprawdź odbiór oraz potwierdzenia dostarczenia i odczytu.
 5. Po udanym teście kontynuuj dodawanie trzeciego użytkownika. Kolejny dry-run powinien potwierdzić brak zaległych migracji.
+
+### Naprawa statusu „Delivered” w czasie rzeczywistym
+
+Migracja `20260917130000_fix_chat_receipt_sequence.sql` zastępuje wyłącznie funkcję `private.broadcast_chat_receipt()`. Zdarzenie `delivered` używa teraz `last_delivered_sequence`, a zdarzenie `read` — `last_read_sequence`. Poprzednia funkcja wybierała starszy kursor odczytu również dla potwierdzenia dostarczenia, przez co nadawca mógł nadal widzieć „Sent”, mimo prawidłowego odbioru wiadomości. Historia, zapisane kursory, RLS i powiadomienia push pozostają bez zmian.
+
+1. Sprawdź, czy projekt zapisany w `supabase/.temp/project-ref` odpowiada stagingowemu projektowi w Dashboardzie Supabase.
+2. Uruchom `npx.cmd supabase db push --linked --dry-run`. Jeżeli wcześniejsze migracje są zastosowane, plan powinien wskazać tylko `20260917130000_fix_chat_receipt_sequence.sql`.
+3. Uruchom `npx.cmd supabase db push --linked`. Poprawka działa po stronie bazy i nie wymaga nowego deploymentu aplikacji.
+4. Powtórz test manualny w rozmowie z wcześniejszą historią odczytu: nadawca pozostaje w czacie, a odbiorca ma aplikację online na ekranie Home. Po nowej wiadomości nadawca powinien zobaczyć „Delivered” bez odświeżenia; po wejściu odbiorcy do rozmowy — „Read”.
+5. Powtórz poprawiony scenariusz UI. Na pozostałych urządzeniach zamknij te same konta testowe, aby nie oznaczały wiadomości jako odczytanych równolegle. Jeżeli korzystasz z już uruchomionego dev serwera pod `http://localhost:3000`, w osobnym terminalu PowerShell wykonaj:
+
+   ```powershell
+   $env:PLAYWRIGHT_BASE_URL = 'http://localhost:3000'
+   $env:PLAYWRIGHT_PORT = '3000'
+   npx.cmd playwright test tests/e2e/chat.ui.spec.ts tests/e2e/realtime.ui.spec.ts --project=chromium
+   ```
+
+   Adres musi zgadzać się z hostem dev serwera, aby Next.js nie blokował zasobów deweloperskich. Bez uruchomionego serwera i tych zmiennych Playwright uruchamia własny serwer pod domyślnym adresem `http://127.0.0.1:3100`.
+6. Kolejny `npx.cmd supabase db push --linked --dry-run` powinien potwierdzić brak zaległych migracji.
 
 ## Ręczne odtworzenie bazy na Free Plan
 
