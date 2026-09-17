@@ -125,7 +125,7 @@ Publiczna rejestracja musi być wyłączona w ustawieniach Supabase Auth, równi
 Podczas przejścia ze starej wersji dwuosobowej zachowaj następującą kolejność:
 
 1. W **Authentication → Sign In / Providers → Email** wyłącz **Allow new users to sign up**. Ustawienie `supabase/config.toml` zabezpiecza lokalny stack, ale ustawienie hostowanego projektu należy sprawdzić osobno w Dashboardzie.
-2. Zastosuj migrację `20260904120000_add_multi_user_direct_chat.sql`, gdy istnieją jeszcze tylko dwa dotychczasowe konta aplikacji. Historia starego czatu zostanie przypisana do ich rozmowy 1:1.
+2. Zastosuj wszystkie migracje, w tym `20260904120000_add_multi_user_direct_chat.sql` oraz `20260917120000_fix_chat_notification_recipient.sql`, gdy istnieją jeszcze tylko dwa dotychczasowe konta aplikacji. Historia starego czatu zostanie przypisana do ich rozmowy 1:1.
 3. Wdróż nową wersję aplikacji, ale jeszcze nie dodawaj trzeciego konta.
 4. Na urządzeniach obu istniejących użytkowników uruchom nową wersję online i poczekaj na opróżnienie kolejki offline. Migruje to cache i ewentualne wiadomości oczekujące do rozmowy z identyfikatorem. Na stagingu można zamiast tego wyczyścić dane witryny, jeżeli lokalna historia i outbox nie są potrzebne.
 5. W **Authentication → Users → Add user → Create new user** utwórz kolejne konta z predefiniowanymi adresami i silnymi hasłami oraz włącz automatyczne potwierdzenie e-maila. Nie twórz rekordów bezpośrednim SQL-em.
@@ -134,6 +134,16 @@ Podczas przejścia ze starej wersji dwuosobowej zachowaj następującą kolejno�
 8. Zaloguj się każdym kontem i przeprowadź testy współdzielonych list, kategorii oraz izolacji rozmów.
 
 Nie usuwaj istniejących użytkowników z historią czatu podczas zwykłego wdrożenia. Klucze obce celowo chronią historię rozmów; wycofanie konta wymaga osobnej, świadomej procedury retencji danych.
+
+### Naprawa wysyłania wiadomości po migracji wieloużytkownikowej
+
+Pierwsza migracja czatu zawierała konflikt nazwy zmiennej `recipient_id` z kolumną tabeli w triggerze powiadomień. Błąd PostgreSQL `42702` przerywał całą transakcję zapisu wiadomości. Naprawa zastępuje wyłącznie funkcję triggera, bez usuwania historii i bez zmiany RLS.
+
+1. W katalogu projektu uruchom `npx.cmd supabase db push --linked --dry-run`. Jeżeli poprzednia migracja jest już zastosowana, plan powinien wskazać tylko `20260917120000_fix_chat_notification_recipient.sql`.
+2. Uruchom `npx.cmd supabase db push --linked`.
+3. Wdróż aktualną wersję aplikacji. Obsługa błędów odczytuje teraz również pole `message` ze zwykłych obiektów błędów Supabase, zamiast zastępować je ogólnym komunikatem.
+4. Odśwież aplikację na obu kontach testowych i wyślij po jednej wiadomości w dotychczasowej rozmowie. Sprawdź odbiór oraz potwierdzenia dostarczenia i odczytu.
+5. Po udanym teście kontynuuj dodawanie trzeciego użytkownika. Kolejny dry-run powinien potwierdzić brak zaległych migracji.
 
 ## Ręczne odtworzenie bazy na Free Plan
 
