@@ -1,4 +1,5 @@
 export type {
+  ChatConversationSummary,
   ChatMessage,
   ChatMessageDeliveryStatus,
   ChatReadState,

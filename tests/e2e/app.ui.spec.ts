@@ -169,7 +169,7 @@ async function touchDragAcross(
 
 test.describe('Shared Grocery & Todo UI with Supabase', () => {
   test.describe.configure({ mode: 'serial' })
-  test.skip(!hasTestConfig, 'Set Supabase and allowlisted E2E credentials')
+  test.skip(!hasTestConfig, 'Set Supabase and admin-created E2E credentials')
 
   const cleanupListTitles = new Set<string>()
   const cleanupCategoryNames = new Set<string>()
@@ -181,7 +181,7 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
       email: testEmail!,
       password: testPassword!,
     })
-    expect(error, 'The configured allowlisted test account must authenticate').toBeNull()
+    expect(error, 'The configured app member must authenticate').toBeNull()
   })
 
   test.afterEach(async () => {

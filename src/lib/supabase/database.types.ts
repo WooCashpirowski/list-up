@@ -167,10 +167,47 @@ export type Database = {
           },
         ]
       }
+      chat_conversations: {
+        Row: {
+          id: string
+          first_user_id: string
+          second_user_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          first_user_id: string
+          second_user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          first_user_id?: string
+          second_user_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'chat_conversations_first_user_id_fkey'
+            columns: ['first_user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'chat_conversations_second_user_id_fkey'
+            columns: ['second_user_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           id: string
           sequence: number
+          conversation_id: string
           sender_id: string
           body: string
           created_at: string
@@ -178,6 +215,7 @@ export type Database = {
         Insert: {
           id: string
           sequence?: never
+          conversation_id: string
           sender_id?: string
           body: string
           created_at?: string
@@ -185,11 +223,19 @@ export type Database = {
         Update: {
           id?: string
           sequence?: never
+          conversation_id?: string
           sender_id?: string
           body?: string
           created_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: 'chat_messages_conversation_id_fkey'
+            columns: ['conversation_id']
+            isOneToOne: false
+            referencedRelation: 'chat_conversations'
+            referencedColumns: ['id']
+          },
           {
             foreignKeyName: 'chat_messages_sender_id_fkey'
             columns: ['sender_id']
@@ -201,18 +247,21 @@ export type Database = {
       }
       chat_read_state: {
         Row: {
+          conversation_id: string
           user_id: string
           last_delivered_sequence: number | null
           last_read_sequence: number | null
           updated_at: string
         }
         Insert: {
+          conversation_id: string
           user_id: string
           last_delivered_sequence?: number | null
           last_read_sequence?: number | null
           updated_at?: string
         }
         Update: {
+          conversation_id?: string
           user_id?: string
           last_delivered_sequence?: number | null
           last_read_sequence?: number | null
@@ -220,25 +269,32 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: 'chat_read_state_conversation_id_fkey'
+            columns: ['conversation_id']
+            isOneToOne: false
+            referencedRelation: 'chat_conversations'
+            referencedColumns: ['id']
+          },
+          {
             foreignKeyName: 'chat_read_state_user_id_fkey'
             columns: ['user_id']
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: 'profiles'
             referencedColumns: ['id']
           },
           {
-            foreignKeyName: 'chat_read_state_last_delivered_sequence_fkey'
-            columns: ['last_delivered_sequence']
+            foreignKeyName: 'chat_read_state_last_delivered_message_fkey'
+            columns: ['conversation_id', 'last_delivered_sequence']
             isOneToOne: false
             referencedRelation: 'chat_messages'
-            referencedColumns: ['sequence']
+            referencedColumns: ['conversation_id', 'sequence']
           },
           {
-            foreignKeyName: 'chat_read_state_last_read_sequence_fkey'
-            columns: ['last_read_sequence']
+            foreignKeyName: 'chat_read_state_last_read_message_fkey'
+            columns: ['conversation_id', 'last_read_sequence']
             isOneToOne: false
             referencedRelation: 'chat_messages'
-            referencedColumns: ['sequence']
+            referencedColumns: ['conversation_id', 'sequence']
           },
         ]
       }
@@ -371,6 +427,29 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: number
       }
+      get_chat_inbox: {
+        Args: Record<PropertyKey, never>
+        Returns: Array<{
+          conversation_id: string
+          peer_id: string
+          peer_email: string
+          peer_display_name: string
+          last_message_id: string | null
+          last_message_sender_id: string | null
+          last_message_body: string | null
+          last_message_sequence: number | null
+          last_message_created_at: string | null
+          last_incoming_sequence: number | null
+          unread_count: number
+        }>
+      }
+      get_chat_peer_receipt: {
+        Args: { target_conversation_id: string }
+        Returns: Array<{
+          last_delivered_sequence: number | null
+          last_read_sequence: number | null
+        }>
+      }
       get_peer_chat_receipt: {
         Args: Record<PropertyKey, never>
         Returns: Array<{
@@ -399,6 +478,7 @@ export type Database = {
           recipient_id: string
           sender_name: string
           message_body: string | null
+          conversation_id: string | null
           attempt_number: number
         }>
       }

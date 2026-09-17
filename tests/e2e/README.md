@@ -2,9 +2,9 @@
 
 ## Configuration
 
-Copy `.env.test.example` to `.env.test.local` and provide a Supabase Auth
-account included in the database allowlist. `.env.test.local` is ignored by
-Git. Variables already present in `.env.local` do not need to be duplicated.
+Copy `.env.test.example` to `.env.test.local` and provide three confirmed
+Supabase Auth accounts created by an administrator. `.env.test.local` is ignored
+by Git. Variables already present in `.env.local` do not need to be duplicated.
 Both files must point to the staging Supabase project. Never run the database
 or browser E2E suites against production. See the
 [staging runbook](../../docs/staging.md) for the environment topology and
@@ -15,16 +15,19 @@ database triggers, anonymous access denial, and category search. Every mutated
 record uses a unique name and is removed during cleanup.
 
 ```dotenv
-E2E_TEST_EMAIL=an-email-present-in-the-rls-allowlist@example.com
+E2E_TEST_EMAIL=first-admin-created-user@example.com
 E2E_TEST_PASSWORD=replace-me
-E2E_SECOND_USER_EMAIL=second-allowlisted-user@example.com
+E2E_SECOND_USER_EMAIL=second-admin-created-user@example.com
 E2E_SECOND_USER_PASSWORD=replace-me
+E2E_THIRD_USER_EMAIL=third-admin-created-user@example.com
+E2E_THIRD_USER_PASSWORD=replace-me
 E2E_SUPABASE_SERVICE_ROLE_KEY=replace-me-for-tests-only
 ```
 
-The second account and service-role value are only required by the chat RLS,
-recipient, and notification-outbox integration test. Keep the service-role key
-in the ignored `.env.test.local`; it must never be exposed to browser code.
+The second and third accounts plus the service-role value are required by the
+chat RLS, conversation-isolation, recipient, and notification-outbox integration
+tests. Keep the service-role key in the ignored `.env.test.local`; it must never
+be exposed to browser code.
 
 ## Commands
 

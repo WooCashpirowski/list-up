@@ -12,6 +12,8 @@ const firstEmail = process.env.E2E_TEST_EMAIL
 const firstPassword = process.env.E2E_TEST_PASSWORD
 const secondEmail = process.env.E2E_SECOND_USER_EMAIL
 const secondPassword = process.env.E2E_SECOND_USER_PASSWORD
+const thirdEmail = process.env.E2E_THIRD_USER_EMAIL
+const thirdPassword = process.env.E2E_THIRD_USER_PASSWORD
 
 const hasConfig = Boolean(
   url &&
@@ -20,7 +22,9 @@ const hasConfig = Boolean(
     firstEmail &&
     firstPassword &&
     secondEmail &&
-    secondPassword,
+    secondPassword &&
+    thirdEmail &&
+    thirdPassword,
 )
 
 async function signIn(page: Page, email: string, password: string) {
@@ -34,12 +38,14 @@ async function signIn(page: Page, email: string, password: string) {
 test('delivers chat messages in realtime, tracks unread, and syncs an offline send', async ({
   browser,
 }) => {
-  test.skip(!hasConfig, 'Set both allowlisted users and the test service role')
+  test.skip(!hasConfig, 'Set three app users and the test service role')
 
   const firstContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
   const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const thirdContext = await browser.newContext({ viewport: { width: 390, height: 844 } })
   const firstPage = await firstContext.newPage()
   const secondPage = await secondContext.newPage()
+  const thirdPage = await thirdContext.newPage()
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
   const onlineMessage = `Realtime chat ${suffix}`
   const offlineMessage = `Offline chat ${suffix}`
@@ -47,39 +53,56 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     auth: { autoRefreshToken: false, persistSession: false },
   })
   let secondUserId: string | null = null
+  let conversationId: string | null = null
   let previousReadState:
     | Database['public']['Tables']['chat_read_state']['Row']
     | null = null
 
   try {
-    const firstRealtimeReady = waitForRealtimeSubscription(
-      firstPage,
-      'list-up:chat:live',
-    )
-    const secondRealtimeReady = waitForRealtimeSubscription(
-      secondPage,
-      'list-up:chat:live',
-    )
     await Promise.all([
       signIn(firstPage, firstEmail!, firstPassword!),
       signIn(secondPage, secondEmail!, secondPassword!),
+      signIn(thirdPage, thirdEmail!, thirdPassword!),
     ])
-    await Promise.all([firstRealtimeReady, secondRealtimeReady])
-    const { data: secondProfile } = await admin
+    const { data: profiles } = await admin
       .from('profiles')
-      .select('id')
-      .ilike('email', secondEmail!)
-      .single()
-    secondUserId = secondProfile!.id
+      .select('id, email')
+      .in('email', [firstEmail!, secondEmail!])
+    const firstUserId = profiles?.find(({ email }) => email === firstEmail)?.id
+    secondUserId = profiles?.find(({ email }) => email === secondEmail)?.id ?? null
+    const { data: conversations } = await admin
+      .from('chat_conversations')
+      .select('*')
+    conversationId =
+      conversations?.find(
+        (conversation) =>
+          [conversation.first_user_id, conversation.second_user_id]
+            .sort()
+            .join(':') === [firstUserId, secondUserId].sort().join(':'),
+      )?.id ?? null
+    expect(conversationId).toBeTruthy()
     const { data: savedReadState } = await admin
       .from('chat_read_state')
       .select('*')
-      .eq('user_id', secondUserId)
+      .eq('conversation_id', conversationId!)
+      .eq('user_id', secondUserId!)
       .maybeSingle()
     previousReadState = savedReadState
 
     await firstPage.getByRole('button', { name: 'Chat', exact: true }).click()
     await expect(firstPage.getByRole('heading', { name: 'Chat' })).toBeVisible()
+    const firstRealtimeReady = waitForRealtimeSubscription(
+      firstPage,
+      `list-up:chat:${conversationId}:live`,
+    )
+    await firstPage
+      .getByRole('button')
+      .filter({ hasText: secondEmail! })
+      .click()
+    await expect(firstPage).toHaveURL(
+      new RegExp(`[?&]conversation=${conversationId}`),
+    )
+    await firstRealtimeReady
     await firstPage
       .getByRole('textbox', { name: 'Message', exact: true })
       .fill(onlineMessage)
@@ -93,10 +116,25 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     await expect(
       secondPage.getByLabel(/unread chat messages/),
     ).toBeVisible()
+    await expect(thirdPage.getByLabel(/unread chat messages/)).toHaveCount(0)
     await secondPage.getByRole('button', { name: /Chat/ }).click()
+    const secondRealtimeReady = waitForRealtimeSubscription(
+      secondPage,
+      `list-up:chat:${conversationId}:live`,
+    )
+    await secondPage
+      .getByRole('button')
+      .filter({ hasText: firstEmail! })
+      .click()
+    await expect(secondPage).toHaveURL(
+      new RegExp(`[?&]conversation=${conversationId}`),
+    )
+    await secondRealtimeReady
     await expect(secondPage.getByText(onlineMessage, { exact: true })).toBeVisible()
     await expect(secondPage.getByLabel(/unread chat messages/)).toHaveCount(0)
     await expect(firstMessageBubble.getByLabel('Read')).toBeVisible()
+    await thirdPage.getByRole('button', { name: /Chat/ }).click()
+    await expect(thirdPage.getByText(onlineMessage, { exact: true })).toHaveCount(0)
 
     await secondPage
       .getByRole('textbox', { name: 'Message', exact: true })
@@ -126,7 +164,11 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     if (ids.length > 0) {
       await admin.from('notification_events').delete().in('source_id', ids)
       if (secondUserId) {
-        await admin.from('chat_read_state').delete().eq('user_id', secondUserId)
+        await admin
+          .from('chat_read_state')
+          .delete()
+          .eq('user_id', secondUserId)
+          .eq('conversation_id', conversationId!)
       }
       await admin.from('chat_messages').delete().in('id', ids)
       if (previousReadState) {
@@ -135,5 +177,6 @@ test('delivers chat messages in realtime, tracks unread, and syncs an offline se
     }
     await firstContext.close()
     await secondContext.close()
+    await thirdContext.close()
   }
 })

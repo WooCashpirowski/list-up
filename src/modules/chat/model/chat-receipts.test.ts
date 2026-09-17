@@ -12,6 +12,7 @@ function ownMessage(sequence: number): ChatMessage {
   return {
     id: String(sequence),
     sequence,
+    conversation_id: 'conversation',
     sender_id: 'me',
     body: 'message',
     created_at: '2026-08-19T10:00:00.000Z',

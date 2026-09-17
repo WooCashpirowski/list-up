@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'list-up-pwa'
-const APP_SHELL_CACHE = `${CACHE_PREFIX}-shell-v4`
-const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v4`
+const APP_SHELL_CACHE = `${CACHE_PREFIX}-shell-v5`
+const RUNTIME_CACHE = `${CACHE_PREFIX}-runtime-v5`
 const PRECACHE_URLS = [
   '/',
   '/offline.html',
@@ -108,7 +108,11 @@ function readPushPayload(event) {
   }
 }
 
-async function hasFocusedChatClient() {
+async function hasFocusedChatClient(requestedUrl) {
+  const requestedConversation = new URL(requestedUrl, self.location.origin)
+    .searchParams.get('conversation')
+  if (!requestedConversation) return false
+
   const windows = await self.clients.matchAll({
     type: 'window',
     includeUncontrolled: true,
@@ -120,7 +124,8 @@ async function hasFocusedChatClient() {
       client.focused &&
       client.visibilityState === 'visible' &&
       url.origin === self.location.origin &&
-      url.searchParams.get('view') === 'chat'
+      url.searchParams.get('view') === 'chat' &&
+      url.searchParams.get('conversation') === requestedConversation
     )
   })
 }
@@ -130,7 +135,7 @@ self.addEventListener('push', (event) => {
   if (!payload) return
 
   event.waitUntil(
-    hasFocusedChatClient().then((chatIsFocused) => {
+    hasFocusedChatClient(payload.url || '/?view=chat').then((chatIsFocused) => {
       if (chatIsFocused) return undefined
 
       return self.registration.showNotification(payload.title || 'List Up!', {

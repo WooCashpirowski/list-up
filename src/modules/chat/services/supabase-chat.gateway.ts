@@ -13,6 +13,7 @@ import type {
 import { toChatMessage } from './chat.mapper'
 import {
   createMessage,
+  getInbox,
   getLatestMessages,
   getMessagesBefore,
   getPeerReceipt,
@@ -29,27 +30,34 @@ export function createSupabaseChatGateway(
   const supabase = resolveSupabaseClient(client)
 
   return {
-    getLatestMessages: (limit) => getLatestMessages(limit, supabase),
-    getMessagesBefore: (sequence, limit) =>
-      getMessagesBefore(sequence, limit, supabase),
+    getInbox: () => getInbox(supabase),
+    getLatestMessages: (conversationId, limit) =>
+      getLatestMessages(conversationId, limit, supabase),
+    getMessagesBefore: (conversationId, sequence, limit) =>
+      getMessagesBefore(conversationId, sequence, limit, supabase),
     createMessage: (input) => createMessage(input, supabase),
     getUnreadCount: () => getUnreadCount(supabase),
-    getPeerReceipt: () => getPeerReceipt(supabase),
+    getPeerReceipt: (conversationId) =>
+      getPeerReceipt(conversationId, supabase),
     markDeliveredThrough: (sequence) =>
       markDeliveredThrough(sequence, supabase),
     markReadThrough: (sequence) => markReadThrough(sequence, supabase),
-    subscribe: (userId, handlers) => {
+    subscribe: (userId, conversationId, handlers) => {
       const clientId = crypto.randomUUID()
       let subscribed = false
-      let pendingReceipts: Array<Omit<ChatReceiptEvent, 'user_id'>> = []
       let pendingTyping: boolean | null = null
       const channel = supabase
-        .channel('list-up:chat:live', {
+        .channel(`list-up:chat:${conversationId}:live`, {
           config: { broadcast: { self: false }, private: true },
         })
         .on(
           'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'chat_messages' },
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'chat_messages',
+            filter: `conversation_id=eq.${conversationId}`,
+          },
           (payload: RealtimePostgresChangesPayload<ChatMessageRecord>) => {
             if (payload.eventType === 'INSERT') {
               handlers.onMessage(toChatMessage(payload.new))
@@ -62,7 +70,7 @@ export function createSupabaseChatGateway(
             event: '*',
             schema: 'public',
             table: 'chat_read_state',
-            filter: `user_id=eq.${userId}`,
+            filter: `conversation_id=eq.${conversationId}`,
           },
           (payload: RealtimePostgresChangesPayload<ChatReadState>) => {
             if (payload.eventType !== 'DELETE') handlers.onReadState(payload.new)
@@ -81,16 +89,6 @@ export function createSupabaseChatGateway(
         .subscribe((status) => {
           subscribed = status === 'SUBSCRIBED'
           if (!subscribed) return
-          if (pendingReceipts.length > 0) {
-            for (const receipt of pendingReceipts) {
-              void channel.send({
-                type: 'broadcast',
-                event: 'receipt',
-                payload: { ...receipt, user_id: userId },
-              })
-            }
-            pendingReceipts = []
-          }
           if (pendingTyping !== null) {
             void channel.send({
               type: 'broadcast',
@@ -112,13 +110,6 @@ export function createSupabaseChatGateway(
       }
 
       return {
-        publishReceipt: (receipt) => {
-          if (!subscribed) {
-            pendingReceipts.push(receipt)
-            return Promise.resolve()
-          }
-          return broadcast('receipt', { ...receipt, user_id: userId })
-        },
         setTyping: (isTyping) => {
           if (!subscribed) {
             pendingTyping = isTyping
@@ -134,6 +125,39 @@ export function createSupabaseChatGateway(
           subscribed = false
           void supabase.removeChannel(channel)
         },
+      }
+    },
+    subscribeInbox: (userId, handlers) => {
+      const channel = supabase
+        .channel(`chat-inbox:${userId}:${crypto.randomUUID()}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'chat_messages' },
+          (payload: RealtimePostgresChangesPayload<ChatMessageRecord>) => {
+            if (payload.eventType === 'INSERT') {
+              handlers.onMessage(toChatMessage(payload.new))
+            }
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'chat_conversations' },
+          handlers.onChanged,
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'chat_read_state',
+            filter: `user_id=eq.${userId}`,
+          },
+          handlers.onChanged,
+        )
+        .subscribe()
+
+      return () => {
+        void supabase.removeChannel(channel)
       }
     },
   }

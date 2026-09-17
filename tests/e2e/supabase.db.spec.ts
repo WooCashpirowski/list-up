@@ -56,17 +56,17 @@ test.describe('Supabase authenticated integration', () => {
   test.describe.configure({ mode: 'serial' })
   test.skip(
     !hasSupabaseConfig || !hasTestCredentials,
-    'Set Supabase variables and allowlisted credentials in .env.test.local',
+    'Set Supabase variables and admin-created credentials in .env.test.local',
   )
 
-  test('authenticates the allowlisted account and reads shared data', async () => {
+  test('authenticates an app member and reads shared data', async () => {
     const client = createTestClient()
 
     try {
       await signIn(client)
       const { data, error } = await client.from('categories').select('id, name').limit(1)
 
-      expect(error, 'RLS should admit the configured allowlisted account').toBeNull()
+      expect(error, 'RLS should admit the configured app member').toBeNull()
       expect(data?.length).toBeGreaterThan(0)
     } finally {
       await client.auth.signOut()

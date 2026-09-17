@@ -10,6 +10,8 @@ const firstEmail = process.env.E2E_TEST_EMAIL
 const firstPassword = process.env.E2E_TEST_PASSWORD
 const secondEmail = process.env.E2E_SECOND_USER_EMAIL
 const secondPassword = process.env.E2E_SECOND_USER_PASSWORD
+const thirdEmail = process.env.E2E_THIRD_USER_EMAIL
+const thirdPassword = process.env.E2E_THIRD_USER_PASSWORD
 
 const hasChatTestConfig = Boolean(
   supabaseUrl &&
@@ -18,7 +20,9 @@ const hasChatTestConfig = Boolean(
     firstEmail &&
     firstPassword &&
     secondEmail &&
-    secondPassword,
+    secondPassword &&
+    thirdEmail &&
+    thirdPassword,
 )
 
 function client(key: string): SupabaseClient<Database> {
@@ -39,7 +43,7 @@ async function signIn(
 }
 
 test.describe('chat database security and read cursors', () => {
-  test.skip(!hasChatTestConfig, 'Set both allowlisted users and a test service role')
+  test.skip(!hasChatTestConfig, 'Set three app users and a test service role')
 
   test('preserves push subscription ownership during service-role bookkeeping', async () => {
     const userClient = client(anonKey!)
@@ -76,12 +80,15 @@ test.describe('chat database security and read cursors', () => {
   test('creates an immutable message, notifies only its recipient, and advances unread state', async () => {
     const first = client(anonKey!)
     const second = client(anonKey!)
+    const third = client(anonKey!)
     const admin = client(serviceRoleKey!)
     const id = crypto.randomUUID()
     const secondMessageId = crypto.randomUUID()
     const endpoint = `https://push.invalid/${crypto.randomUUID()}`
     let firstUserId: string | undefined
     let secondUserId: string | undefined
+    let thirdUserId: string | undefined
+    let conversationId: string | undefined
     let previousReadState:
       | Database['public']['Tables']['chat_read_state']['Row']
       | null = null
@@ -89,9 +96,46 @@ test.describe('chat database security and read cursors', () => {
     try {
       firstUserId = (await signIn(first, firstEmail!, firstPassword!)).id
       secondUserId = (await signIn(second, secondEmail!, secondPassword!)).id
+      thirdUserId = (await signIn(third, thirdEmail!, thirdPassword!)).id
+      const { data: conversations, error: conversationsError } = await admin
+        .from('chat_conversations')
+        .select('*')
+      expect(conversationsError).toBeNull()
+      conversationId = conversations?.find(
+        (conversation) =>
+          [conversation.first_user_id, conversation.second_user_id]
+            .sort()
+            .join(':') === [firstUserId, secondUserId].sort().join(':'),
+      )?.id
+      expect(conversationId).toBeTruthy()
+
+      const { data: sharedCategories, error: sharedCategoriesError } = await third
+        .from('categories')
+        .select('id')
+        .limit(1)
+      expect(sharedCategoriesError).toBeNull()
+      expect(sharedCategories).not.toBeNull()
+
+      const { data: hiddenConversation, error: hiddenConversationError } =
+        await third
+          .from('chat_conversations')
+          .select('id')
+          .eq('id', conversationId!)
+      expect(hiddenConversationError).toBeNull()
+      expect(hiddenConversation).toEqual([])
+
+      const { data: thirdInbox, error: thirdInboxError } = await third.rpc(
+        'get_chat_inbox',
+      )
+      expect(thirdInboxError).toBeNull()
+      expect(thirdInbox?.map(({ peer_id }) => peer_id)).toEqual(
+        expect.arrayContaining([firstUserId!, secondUserId!]),
+      )
+
       const { data: savedReadState } = await admin
         .from('chat_read_state')
         .select('*')
+        .eq('conversation_id', conversationId!)
         .eq('user_id', secondUserId)
         .maybeSingle()
       previousReadState = savedReadState
@@ -110,7 +154,12 @@ test.describe('chat database security and read cursors', () => {
 
       const { data: inserted, error: insertError } = await first
         .from('chat_messages')
-        .insert({ id, body: 'Playwright secure chat message', sender_id: secondUserId })
+        .insert({
+          id,
+          conversation_id: conversationId!,
+          body: 'Playwright secure chat message',
+          sender_id: secondUserId,
+        })
         .select('*')
         .single()
       expect(insertError).toBeNull()
@@ -119,11 +168,29 @@ test.describe('chat database security and read cursors', () => {
 
       const { data: secondMessage, error: secondInsertError } = await first
         .from('chat_messages')
-        .insert({ id: secondMessageId, body: 'Second ordered message' })
+        .insert({
+          id: secondMessageId,
+          conversation_id: conversationId!,
+          body: 'Second ordered message',
+        })
         .select('*')
         .single()
       expect(secondInsertError).toBeNull()
       expect(secondMessage!.sequence).toBeGreaterThan(inserted!.sequence)
+
+      const { data: leakedMessages, error: leakedMessagesError } = await third
+        .from('chat_messages')
+        .select('id')
+        .eq('conversation_id', conversationId!)
+      expect(leakedMessagesError).toBeNull()
+      expect(leakedMessages).toEqual([])
+
+      const forgedInsert = await third.from('chat_messages').insert({
+        id: crypto.randomUUID(),
+        conversation_id: conversationId!,
+        body: 'This must be rejected',
+      })
+      expect(forgedInsert.error).not.toBeNull()
 
       const { data: ordered } = await first
         .from('chat_messages')
@@ -137,11 +204,19 @@ test.describe('chat database security and read cursors', () => {
 
       const { error: emptyBodyError } = await first
         .from('chat_messages')
-        .insert({ id: crypto.randomUUID(), body: '   ' })
+        .insert({
+          id: crypto.randomUUID(),
+          conversation_id: conversationId!,
+          body: '   ',
+        })
       expect(emptyBodyError).not.toBeNull()
       const { error: longBodyError } = await first
         .from('chat_messages')
-        .insert({ id: crypto.randomUUID(), body: 'x'.repeat(2001) })
+        .insert({
+          id: crypto.randomUUID(),
+          conversation_id: conversationId!,
+          body: 'x'.repeat(2001),
+        })
       expect(longBodyError).not.toBeNull()
 
       const { error: updateError } = await first
@@ -172,7 +247,9 @@ test.describe('chat database security and read cursors', () => {
       expect(ownDelivery.error).not.toBeNull()
 
       const { data: deliveredReceipt, error: deliveredReceiptError } =
-        await first.rpc('get_peer_chat_receipt')
+        await first.rpc('get_chat_peer_receipt', {
+          target_conversation_id: conversationId!,
+        })
       expect(deliveredReceiptError).toBeNull()
       expect(deliveredReceipt).toEqual([
         {
@@ -192,11 +269,14 @@ test.describe('chat database security and read cursors', () => {
       const { data: readState } = await second
         .from('chat_read_state')
         .select('last_delivered_sequence, last_read_sequence')
+        .eq('conversation_id', conversationId!)
         .single()
       expect(readState?.last_read_sequence).toBe(secondMessage!.sequence)
       expect(readState?.last_delivered_sequence).toBe(secondMessage!.sequence)
 
-      const { data: readReceipt } = await first.rpc('get_peer_chat_receipt')
+      const { data: readReceipt } = await first.rpc('get_chat_peer_receipt', {
+        target_conversation_id: conversationId!,
+      })
       expect(readReceipt).toEqual([
         {
           last_delivered_sequence: secondMessage!.sequence,
@@ -213,11 +293,13 @@ test.describe('chat database security and read cursors', () => {
       const { data: privateReadState } = await first
         .from('chat_read_state')
         .select('user_id')
+        .eq('conversation_id', conversationId!)
         .eq('user_id', secondUserId)
       expect(privateReadState).toEqual([])
 
       const anonymousReceipt = await client(anonKey!).rpc(
-        'get_peer_chat_receipt',
+        'get_chat_peer_receipt',
+        { target_conversation_id: conversationId! },
       )
       expect(anonymousReceipt.error).not.toBeNull()
 
@@ -229,6 +311,9 @@ test.describe('chat database security and read cursors', () => {
       expect(events).toEqual([
         { recipient_id: secondUserId, actor_id: firstUserId, source_id: id },
       ])
+      expect(events?.some(({ recipient_id }) => recipient_id === thirdUserId)).toBe(
+        false,
+      )
 
       const { data: leakedSubscription } = await first
         .from('push_subscriptions')
@@ -241,7 +326,11 @@ test.describe('chat database security and read cursors', () => {
         .delete()
         .in('source_id', [id, secondMessageId])
       if (secondUserId) {
-        await admin.from('chat_read_state').delete().eq('user_id', secondUserId)
+        await admin
+          .from('chat_read_state')
+          .delete()
+          .eq('conversation_id', conversationId!)
+          .eq('user_id', secondUserId)
       }
       await admin.from('chat_messages').delete().in('id', [id, secondMessageId])
       if (previousReadState) {
@@ -250,6 +339,7 @@ test.describe('chat database security and read cursors', () => {
       await admin.from('push_subscriptions').delete().eq('endpoint', endpoint)
       await first.auth.signOut()
       await second.auth.signOut()
+      await third.auth.signOut()
     }
   })
 })
