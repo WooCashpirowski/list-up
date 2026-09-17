@@ -131,7 +131,8 @@ async function deliver(
 ): Promise<'sent' | 'retried' | 'dead'> {
   if (
     delivery.event_type !== 'chat.message_created' ||
-    !delivery.message_body
+    !delivery.message_body ||
+    !delivery.conversation_id
   ) {
     await updateDelivery(client, delivery.delivery_id, {
       status: 'dead',
@@ -141,11 +142,14 @@ async function deliver(
     return 'dead'
   }
 
+  const conversationUrl = `/?view=chat&conversation=${encodeURIComponent(
+    delivery.conversation_id,
+  )}`
   const payload = JSON.stringify({
     title: delivery.sender_name,
     body: createNotificationPreview(delivery.message_body),
-    tag: 'list-up-chat',
-    url: '/?view=chat',
+    tag: `list-up-chat:${delivery.conversation_id}`,
+    url: conversationUrl,
   })
 
   let response: Awaited<ReturnType<typeof webPush.sendNotification>>

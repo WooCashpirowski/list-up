@@ -14,6 +14,7 @@ function message(
   return {
     id,
     sequence,
+    conversation_id: 'conversation',
     sender_id: senderId,
     body: id,
     created_at: `2026-08-18T10:00:0${id.length}.000Z`,

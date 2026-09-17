@@ -128,6 +128,58 @@ export async function saveCachedCollection<T>(
   await transactionComplete(transaction)
 }
 
+export async function migrateLegacyChatStorage(
+  userId: string,
+  conversationId: string,
+): Promise<void> {
+  const database = await getDatabase()
+  const cacheTransaction = database.transaction(CACHE_STORE, 'readwrite')
+  const cacheStore = cacheTransaction.objectStore(CACHE_STORE)
+  const legacyKey = cacheKey(userId, 'chat-messages')
+  const legacyRecord = (await requestResult(
+    cacheStore.get(legacyKey),
+  )) as CacheRecord<Array<Record<string, unknown>>> | undefined
+
+  if (legacyRecord) {
+    cacheStore.put({
+      ...legacyRecord,
+      key: cacheKey(userId, `chat-messages:${conversationId}`),
+      collection: `chat-messages:${conversationId}`,
+      value: legacyRecord.value.map((message) => ({
+        ...message,
+        conversation_id: conversationId,
+      })),
+      updatedAt: new Date().toISOString(),
+    } satisfies CacheRecord<Array<Record<string, unknown>>>)
+    cacheStore.delete(legacyKey)
+  }
+  await transactionComplete(cacheTransaction)
+
+  const outboxTransaction = database.transaction(OUTBOX_STORE, 'readwrite')
+  const outboxStore = outboxTransaction.objectStore(OUTBOX_STORE)
+  const outboxIndex = outboxStore.index(OUTBOX_USER_INDEX)
+  const mutations = (await requestResult(
+    outboxIndex.getAll(IDBKeyRange.only(userId)),
+  )) as OutboxMutation[]
+
+  for (const mutation of mutations) {
+    if (
+      mutation.table === 'chat_messages' &&
+      mutation.payload &&
+      typeof mutation.payload.conversation_id !== 'string'
+    ) {
+      outboxStore.put({
+        ...mutation,
+        payload: {
+          ...mutation.payload,
+          conversation_id: conversationId,
+        },
+      } satisfies OutboxMutation)
+    }
+  }
+  await transactionComplete(outboxTransaction)
+}
+
 export async function enqueueMutation(
   input: QueueMutationInput,
 ): Promise<OutboxMutation> {

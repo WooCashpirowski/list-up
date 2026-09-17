@@ -1,5 +1,6 @@
 export {
   getCachedCollection,
+  migrateLegacyChatStorage,
   getOutboxMutations,
   OUTBOX_CHANGED_EVENT,
   OUTBOX_SYNCED_EVENT,

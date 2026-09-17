@@ -87,8 +87,10 @@ function dispatchAndWait(listener: WorkerListener, event: Omit<WorkerEvent, 'wai
 }
 
 test('suppresses push in a focused chat and shows it elsewhere', async () => {
+  const activeConversationId = '11111111-1111-4111-8111-111111111111'
+  const otherConversationId = '22222222-2222-4222-8222-222222222222'
   const focusedClient: TestWindowClient = {
-    url: 'https://list-up.test/?view=chat',
+    url: `https://list-up.test/?view=chat&conversation=${activeConversationId}`,
     focused: true,
     visibilityState: 'visible',
     focus: async () => undefined,
@@ -97,25 +99,31 @@ test('suppresses push in a focused chat and shows it elsewhere', async () => {
   const payload = {
     title: 'Renata',
     body: 'Test message',
-    tag: 'list-up-chat',
-    url: '/?view=chat',
+    tag: `list-up-chat:${activeConversationId}`,
+    url: `/?view=chat&conversation=${activeConversationId}`,
   }
   await dispatchAndWait(focused.listeners.get('push')!, {
     data: { json: () => payload, text: () => payload.body },
   })
   expect(focused.notifications).toEqual([])
 
-  const background = loadServiceWorker([])
-  await dispatchAndWait(background.listeners.get('push')!, {
-    data: { json: () => payload, text: () => payload.body },
+  const otherConversation = loadServiceWorker([focusedClient])
+  const otherPayload = {
+    ...payload,
+    tag: `list-up-chat:${otherConversationId}`,
+    url: `/?view=chat&conversation=${otherConversationId}`,
+  }
+  await dispatchAndWait(otherConversation.listeners.get('push')!, {
+    data: { json: () => otherPayload, text: () => otherPayload.body },
   })
-  expect(background.notifications).toHaveLength(1)
-  expect(background.notifications[0].title).toBe('Renata')
-  expect(background.notifications[0].options).toMatchObject({
+  expect(otherConversation.notifications).toHaveLength(1)
+  expect(otherConversation.notifications[0].title).toBe('Renata')
+  expect(otherConversation.notifications[0].options).toMatchObject({
     body: 'Test message',
-    tag: 'list-up-chat',
+    tag: `list-up-chat:${otherConversationId}`,
     icon: '/pwa-icon-192.png',
     badge: '/notification-badge-96.png',
+    data: { url: `/?view=chat&conversation=${otherConversationId}` },
   })
 })
 

@@ -118,20 +118,22 @@ Sekrety VAPID i webhooka są potrzebne lokalnie tylko podczas świadomego testow
 
 ## Użytkownicy stagingowi
 
-Allowlista jest przechowywana w `private.allowed_user_emails`, dzięki czemu produkcja i staging mogą używać innych adresów bez rozbieżności schematu. Migracja tworząca tabelę inicjalizuje ją z istniejących profili, więc samo zastosowanie migracji nie zmienia dostępu.
+Użytkownicy są członkami aplikacji na podstawie `private.app_users`. Tabelą zarządza trigger na `auth.users`; nie należy dopisywać do niej rekordów ręcznie. Potwierdzone konto utworzone w **Authentication → Users** automatycznie otrzymuje profil oraz po jednej rozmowie 1:1 z każdym dotychczasowym członkiem.
 
-Po migracji skopiuj zawartość `supabase/scripts/configure_staging_allowed_emails.sql` do SQL Editora stagingowego projektu, zastąp oba placeholdery adresami testowymi i uruchom skrypt. Nie zapisuj rzeczywistych adresów w śledzonym pliku.
+Publiczna rejestracja musi być wyłączona w ustawieniach Supabase Auth, również dla providera e-mail. To istotna granica bezpieczeństwa: aplikacja nie prowadzi własnej allowlisty adresów i ufa wyłącznie kontom utworzonym administracyjnie przy wyłączonej rejestracji.
 
-Nie dodawaj nowych użytkowników obok sklonowanych kont. Aplikacja zakłada dwóch uczestników, a dodatkowe profile zaburzyłyby wybór odbiorcy czatu i powiadomień. Jeżeli historia czatu nie jest potrzebna, wyczyść czat, read state, push i outbox, usuń sklonowanych użytkowników przez Supabase Auth, a następnie utwórz dwa nowe, potwierdzone konta odpowiadające stagingowej allowliście.
+Podczas przejścia ze starej wersji dwuosobowej zachowaj następującą kolejność:
 
-Po ustawieniu nowych adresów w allowliście, ale przed utworzeniem nowych kont Auth, uruchom w stagingowym SQL Editorze `supabase/scripts/reset_staging_identity_data.sql`. Skrypt usuwa dane w jednej transakcji i odmawia działania, jeśli allowlista nadal pasuje do istniejącego użytkownika Auth. Następnie:
+1. W **Authentication → Sign In / Providers → Email** wyłącz **Allow new users to sign up**. Ustawienie `supabase/config.toml` zabezpiecza lokalny stack, ale ustawienie hostowanego projektu należy sprawdzić osobno w Dashboardzie.
+2. Zastosuj migrację `20260904120000_add_multi_user_direct_chat.sql`, gdy istnieją jeszcze tylko dwa dotychczasowe konta aplikacji. Historia starego czatu zostanie przypisana do ich rozmowy 1:1.
+3. Wdróż nową wersję aplikacji, ale jeszcze nie dodawaj trzeciego konta.
+4. Na urządzeniach obu istniejących użytkowników uruchom nową wersję online i poczekaj na opróżnienie kolejki offline. Migruje to cache i ewentualne wiadomości oczekujące do rozmowy z identyfikatorem. Na stagingu można zamiast tego wyczyścić dane witryny, jeżeli lokalna historia i outbox nie są potrzebne.
+5. W **Authentication → Users → Add user → Create new user** utwórz kolejne konta z predefiniowanymi adresami i silnymi hasłami oraz włącz automatyczne potwierdzenie e-maila. Nie twórz rekordów bezpośrednim SQL-em.
+6. Uruchom read-only skrypt `supabase/scripts/verify_staging_app_users.sql` w SQL Editorze. Dla `n` członków oczekuj `n × (n - 1) / 2` rozmów i `n × (n - 1)` rekordów read state.
+7. Uzupełnij trzy pary `E2E_TEST_*`, `E2E_SECOND_USER_*` i `E2E_THIRD_USER_*` w ignorowanym `.env.test.local`.
+8. Zaloguj się każdym kontem i przeprowadź testy współdzielonych list, kategorii oraz izolacji rozmów.
 
-1. Upewnij się, że migracja `20260820130000_allow_system_created_by_cleanup.sql` jest zastosowana. Pozwala ona wewnętrznym akcjom `ON DELETE SET NULL` wyczyścić audytowe `created_by`, nadal blokując zmianę tego pola przez klienta.
-2. Usuń sklonowanych użytkowników w **Authentication → Users**. Nie usuwaj rekordów `auth.users` bezpośrednim SQL-em.
-3. Sprawdź, czy stare rekordy `public.profiles` zniknęły kaskadowo. Zachowane listy, kategorie i elementy pozostają, a ich `created_by` zmienia się na `null`.
-4. Utwórz dokładnie dwa nowe konta z adresami z allowlisty, silnymi hasłami stagingowymi i potwierdzonym e-mailem. Trigger utworzy odpowiadające profile.
-5. Zaktualizuj `E2E_TEST_EMAIL`, `E2E_TEST_PASSWORD`, `E2E_SECOND_USER_EMAIL` i `E2E_SECOND_USER_PASSWORD` w ignorowanym `.env.test.local`.
-6. Usuń lokalną sesję i cache witryny stagingowej, zaloguj się ponownie i uruchom pełną weryfikację.
+Nie usuwaj istniejących użytkowników z historią czatu podczas zwykłego wdrożenia. Klucze obce celowo chronią historię rozmów; wycofanie konta wymaga osobnej, świadomej procedury retencji danych.
 
 ## Ręczne odtworzenie bazy na Free Plan
 
@@ -166,8 +168,9 @@ Oczekiwany stan:
 
 - lokalne i zdalne migracje są zgodne, a dry-run nie proponuje zmian;
 - anonimowy dostęp do tabel aplikacyjnych jest odrzucony;
-- oba konta z allowlisty przechodzą logowanie i współdzielony CRUD;
-- Postgres Changes oraz prywatny kanał Realtime działają;
+- wszystkie trzy administracyjnie utworzone konta przechodzą logowanie i współdzielony CRUD;
+- każde konto widzi po jednej rozmowie z pozostałymi użytkownikami, a nieuczestniczące trzecie konto nie może odczytać wiadomości obcej pary;
+- Postgres Changes oraz prywatne kanały Realtime rozdzielone według rozmowy działają;
 - tabele push/outbox i Vault nie zawierają skopiowanych danych produkcyjnych;
 - po skonfigurowaniu push chroniony endpoint zwraca `401` bez sekretu i poprawne podsumowanie z właściwym nagłówkiem;
 - test mobilny rejestruje osobną subskrypcję stagingową i dostarcza wiadomość przy zamkniętym lub działającym w tle czacie.

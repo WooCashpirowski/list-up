@@ -3,6 +3,8 @@ export type CachedCollectionName =
   | 'categories'
   | 'list-items'
   | 'chat-messages'
+  | `chat-messages:${string}`
+  | 'chat-inbox'
   | 'profiles'
 
 export type OutboxTable = 'lists' | 'categories' | 'list_items' | 'chat_messages'

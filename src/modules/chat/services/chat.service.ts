@@ -1,6 +1,7 @@
 import type { AppSupabaseClient } from '@/src/lib/supabase/service-client'
 
 import type {
+  ChatConversationSummary,
   CreateChatMessageInput,
   PersistedChatMessage,
   ChatReceiptState,
@@ -8,12 +9,14 @@ import type {
 import { toChatMessage } from './chat.mapper'
 
 export async function getLatestMessages(
+  conversationId: string,
   limit: number,
   supabase: AppSupabaseClient,
 ): Promise<PersistedChatMessage[]> {
   const { data } = await supabase
     .from('chat_messages')
     .select('*')
+    .eq('conversation_id', conversationId)
     .order('sequence', { ascending: false })
     .limit(limit)
     .throwOnError()
@@ -22,6 +25,7 @@ export async function getLatestMessages(
 }
 
 export async function getMessagesBefore(
+  conversationId: string,
   sequence: number,
   limit: number,
   supabase: AppSupabaseClient,
@@ -29,6 +33,7 @@ export async function getMessagesBefore(
   const { data } = await supabase
     .from('chat_messages')
     .select('*')
+    .eq('conversation_id', conversationId)
     .lt('sequence', sequence)
     .order('sequence', { ascending: false })
     .limit(limit)
@@ -66,10 +71,25 @@ export async function getUnreadCount(
   return Number(data ?? 0)
 }
 
+export async function getInbox(
+  supabase: AppSupabaseClient,
+): Promise<ChatConversationSummary[]> {
+  const { data } = await supabase.rpc('get_chat_inbox').throwOnError()
+  return data.map((conversation) => ({
+    ...conversation,
+    unread_count: Number(conversation.unread_count),
+  }))
+}
+
 export async function getPeerReceipt(
+  conversationId: string,
   supabase: AppSupabaseClient,
 ): Promise<ChatReceiptState> {
-  const { data } = await supabase.rpc('get_peer_chat_receipt').throwOnError()
+  const { data } = await supabase
+    .rpc('get_chat_peer_receipt', {
+      target_conversation_id: conversationId,
+    })
+    .throwOnError()
   return (
     data[0] ?? {
       last_delivered_sequence: null,

@@ -2,7 +2,7 @@
 
 ## 1. Cel i zakres
 
-List Up! to prywatna, współdzielona aplikacja PWA do zarządzania listami zakupów i listami zadań. Dane są dostępne dla dwóch z góry wskazanych użytkowników i synchronizowane między ich urządzeniami w czasie rzeczywistym.
+List Up! to prywatna, współdzielona aplikacja PWA do zarządzania listami zakupów i listami zadań. Dane są dostępne dla użytkowników utworzonych administracyjnie w Supabase i synchronizowane między ich urządzeniami w czasie rzeczywistym.
 
 Aplikacja działa w modelu offline-ready: po wcześniejszym uruchomieniu online interfejs i zapisane dane są dostępne bez sieci, a lokalne zmiany trafiają do kolejki i synchronizują się automatycznie po odzyskaniu połączenia.
 
@@ -100,10 +100,11 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 ## 5. Uwierzytelnianie i bezpieczeństwo
 
 - Logowanie odbywa się adresem e-mail i hasłem przez Supabase Auth.
-- Dostęp do danych aplikacji mają wyłącznie dwa potwierdzone konta znajdujące się na allowliście.
+- Dostęp do danych aplikacji mają wyłącznie potwierdzone konta utworzone przez administratora w panelu Supabase i zarejestrowane w prywatnej tabeli członkostwa `private.app_users`.
 - RLS jest włączone dla wszystkich tabel publicznych.
-- Użytkownik anonimowy oraz konto spoza allowlisty nie mogą odczytywać ani modyfikować danych.
-- Obaj dopuszczeni użytkownicy pracują na jednym współdzielonym zbiorze list, kategorii i elementów.
+- Publiczna rejestracja jest wyłączona zarówno dla całego Auth, jak i providera e-mail. Aplikacja nie udostępnia formularza rejestracji ani zaproszeń.
+- Użytkownik anonimowy oraz konto bez aktywnego członkostwa nie mogą odczytywać ani modyfikować danych.
+- Wszyscy dopuszczeni użytkownicy pracują na jednym współdzielonym zbiorze list, kategorii i elementów.
 - Pole `created_by` ma charakter audytowy i jest ustawiane po stronie bazy na podstawie bieżącej sesji.
 
 ## 6. Funkcjonalności
@@ -111,7 +112,7 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 ### 6.1. Powłoka, nawigacja i personalizacja
 
 - Główna nawigacja dolna zawiera widoki list, kategorii i czatu oraz akcję wylogowania. Ikona czatu pokazuje dostępny dla czytnika ekranu wskaźnik nieprzeczytanych wiadomości.
-- Widok wszystkich list używa adresu `/`, konkretna lista `/?list=<list_id>`, kategorie `/?view=categories`, a czat `/?view=chat`.
+- Widok wszystkich list używa adresu `/`, konkretna lista `/?list=<list_id>`, kategorie `/?view=categories`, skrzynka czatu `/?view=chat`, a rozmowa bezpośrednia `/?view=chat&conversation=<conversation_id>`.
 - Otwarcie widoku dodaje wpis do historii przez `window.history.pushState`, dzięki czemu systemowy przycisk Back, gest powrotu na urządzeniu mobilnym oraz nawigacja Forward odtwarzają poprzedni widok bez przeładowania strony.
 - Odświeżenie lub bezpośrednie otwarcie adresu konkretnej listy przywraca ten widok po uwierzytelnieniu i załadowaniu danych. Nieistniejący identyfikator listy jest zastępowany adresem widoku wszystkich list.
 - Przycisk powrotu wewnątrz listy używa istniejącego wpisu historii, jeżeli lista została otwarta z aplikacji. Przy bezpośrednim wejściu zastępuje bieżący adres widokiem wszystkich list, aby nie przenosić użytkownika poza aplikację.
@@ -178,7 +179,7 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 - Manifest, ikony i Service Worker umożliwiają instalację aplikacji.
 - Service Worker przechowuje powłokę aplikacji, statyczne zasoby Next.js i stronę awaryjną. Nawigacja używa strategii network-first z fallbackiem do cache, a zasoby statyczne cache-first.
 - Parametry nawigacyjne są interpretowane po stronie klienta, dlatego zapisany dokument `/` może odtworzyć właściwy widok również po uruchomieniu bez sieci, o ile jego dane znajdują się już w IndexedDB.
-- IndexedDB przechowuje osobno dla użytkownika kolekcje `lists`, `categories` i `list-items` oraz kolejkę outbox.
+- IndexedDB przechowuje osobno dla użytkownika kolekcje `lists`, `categories`, `list-items`, skrzynkę rozmów i wiadomości rozdzielone według `conversation_id` oraz kolejkę outbox.
 - Gdy sieć jest niedostępna albo żądanie kończy się błędem sieciowym, mutacja zachowuje efekt optymistyczny i trafia do outboxa.
 - Kolejka obsługuje operacje `upsert`, `update` i `delete` na listach, kategoriach oraz elementach list.
 - Zmiany są synchronizowane w kolejności ich utworzenia po starcie aplikacji, dodaniu wpisu do kolejki lub odzyskaniu połączenia. Nieudane operacje są zachowywane i ponawiane; późniejsze operacje dotyczące tego samego rekordu czekają na rozwiązanie wcześniejszego błędu.
@@ -203,7 +204,7 @@ Automatyczne testy Playwright obejmują co najmniej:
 
 - jednostkową weryfikację czystych modeli: katalogu i filtrowania kategorii, wyglądu kategorii, grupowania i kolejności elementów, postępu list oraz neutralnych zmian kolekcji;
 - statyczną weryfikację granic modułów i dostępu do infrastruktury przez ESLint;
-- blokadę anonimowego dostępu przez RLS i logowanie konta z allowlisty;
+- blokadę anonimowego dostępu przez RLS i logowanie konta utworzonego administracyjnie;
 - relacyjny CRUD, integralność danych, triggery i niezmienność typu listy;
 - logowanie, wylogowanie oraz zapamiętywanie języka;
 - adresy widoków, bezpośrednie wejście do listy oraz nawigację Back i Forward między listą, wszystkimi listami i kategoriami;
@@ -225,27 +226,29 @@ Podstawowe polecenia weryfikacyjne:
 
 ## 10. Świadome ograniczenia
 
-- Aplikacja jest przeznaczona dla dokładnie dwóch zaufanych użytkowników i nie implementuje osobnych przestrzeni roboczych ani zaproszeń.
+- Aplikacja jest przeznaczona dla zamkniętej grupy zaufanych użytkowników dodawanych wyłącznie przez panel Supabase; nie implementuje osobnych przestrzeni roboczych, samodzielnej rejestracji ani zaproszeń.
 - Dane aplikacyjne są współdzielone; `created_by` nie ogranicza widoczności rekordów.
+- Czat obsługuje wyłącznie rozmowy 1:1; czaty grupowe nie są dostępne.
 - Typ istniejącej listy jest niezmienny.
 - Kolejność i zwinięcie kategorii wewnątrz listy nie są synchronizowane między urządzeniami.
 - Sekcja „Inne” jest wyłącznie reprezentacją elementów bez kategorii.
 
 ## 11. Czat i powiadomienia Web Push
 
-- Aplikacja udostępnia jeden wspólny, tekstowy czat dla dwóch kont pod adresem `/?view=chat`. Nawigacja dolna pokazuje ikonę dymków oraz wskaźnik nieprzeczytanych wiadomości.
-- Wiadomość ma UUID generowany po stronie klienta, serwerowy kursor `sequence`, nadawcę, tekst długości 1–2000 znaków i czas utworzenia. Wiadomości nie można edytować ani usuwać przez klienta.
-- Najnowsze 50 wiadomości jest pobierane przy wejściu do widoku, a historia jest ładowana stronami po 50 rekordów za pomocą kursora `sequence`. IndexedDB zachowuje 100 najnowszych wiadomości.
-- Wysłanie działa optymistycznie. Przy braku sieci wiadomość trafia do wspólnego outboxa, pokazuje stan oczekiwania i jest wysyłana w tej samej kolejności po odzyskaniu połączenia. Błąd można ponowić ręcznie.
-- Stan dostarczenia i odczytu jest współdzielony między urządzeniami przez monotoniczne kursory `last_delivered_sequence` oraz `last_read_sequence`. Dostarczenie oznacza faktyczne pobranie wiadomości przez co najmniej jeden klient odbiorcy; odczyt implikuje dostarczenie i następuje dopiero wtedy, gdy najnowsza odebrana wiadomość jest rzeczywiście widoczna w aktywnym czacie.
+- Aplikacja udostępnia skrzynkę rozmów 1:1 pod adresem `/?view=chat`. Każdy kafelek wskazuje rozmówcę, ostatnią wiadomość i licznik nieprzeczytanych; wybór otwiera `/?view=chat&conversation=<conversation_id>`. Nawigacja dolna pokazuje łączny wskaźnik nieprzeczytanych wiadomości.
+- Dla każdej pary aktywnych użytkowników istnieje dokładnie jedna kanoniczna rozmowa. Dodanie potwierdzonego konta w panelu Supabase automatycznie tworzy profil, członkostwo i rozmowy ze wszystkimi dotychczasowymi użytkownikami.
+- Wiadomość ma UUID generowany po stronie klienta, identyfikator rozmowy, serwerowy kursor `sequence`, nadawcę, tekst długości 1–2000 znaków i czas utworzenia. Wiadomości nie można edytować ani usuwać przez klienta.
+- Najnowsze 50 wiadomości wybranej rozmowy jest pobierane przy wejściu do widoku, a historia jest ładowana stronami po 50 rekordów za pomocą kursora `sequence`. IndexedDB zachowuje osobno po 100 najnowszych wiadomości każdej rozmowy.
+- Wysłanie działa optymistycznie. Przy braku sieci wiadomość z identyfikatorem rozmowy trafia do wspólnego outboxa, pokazuje stan oczekiwania i jest wysyłana w tej samej kolejności po odzyskaniu połączenia. Błąd można ponowić ręcznie.
+- Stan dostarczenia i odczytu jest utrzymywany osobno dla rozmowy i użytkownika przez monotoniczne kursory `last_delivered_sequence` oraz `last_read_sequence`. Dostarczenie oznacza faktyczne pobranie wiadomości przez co najmniej jeden klient odbiorcy; odczyt implikuje dostarczenie i następuje dopiero wtedy, gdy najnowsza odebrana wiadomość jest rzeczywiście widoczna w aktywnej rozmowie.
 - Własna wiadomość pokazuje pojedynczy znacznik po zapisie na serwerze, podwójny po dostarczeniu i wyróżniony podwójny po odczytaniu. Trwały stan jest pobierany przez ograniczone RPC; polityka RLS nadal nie pozwala czytać surowego rekordu `chat_read_state` drugiej osoby.
-- Podczas pisania druga osoba widzi animowane trzy kropki. Zdarzenia są efemeryczne, ograniczone częstotliwościowo i przesyłane przez prywatny kanał Realtime Broadcast `list-up:chat:live`; wskaźnik sam wygasa po bezczynności lub utracie połączenia i nie jest zapisywany w historii.
+- Podczas pisania rozmówca widzi animowane trzy kropki. Zdarzenia są efemeryczne, ograniczone częstotliwościowo i przesyłane przez prywatny kanał Realtime Broadcast `list-up:chat:<conversation_id>:live`; RLS dopuszcza wyłącznie dwóch uczestników danej rozmowy. Wskaźnik sam wygasa po bezczynności lub utracie połączenia i nie jest zapisywany w historii.
 - Użytkownik może ustawić `profiles.display_name`; nazwa jest używana przy wiadomościach i w powiadomieniach, z fallbackiem wyprowadzonym z e-maila.
 - Każde urządzenie posiada osobną subskrypcję Web Push. Systemowy prompt jest wyświetlany wyłącznie po kliknięciu użytkownika, a wylogowanie usuwa i anuluje subskrypcję bieżącego urządzenia.
 - Na iOS Web Push wymaga dodania aplikacji do ekranu początkowego i systemu iOS 16.4 lub nowszego. Pozostałe platformy są wykrywane przez dostępność Service Worker, Push API i Notifications API.
 - `notification_events` opisuje typ zdarzenia, odbiorcę, autora i źródło. `notification_deliveries` przechowuje osobną dostawę dla każdej aktywnej subskrypcji, dzierżawę, próby oraz status końcowy.
 - Database Webhook wywołuje chroniony `POST /api/notifications/dispatch` po zapisie zdarzenia, a `pg_cron` co minutę ponawia zaległe dostawy. Endpoint wymaga sekretu, działa w Node.js i korzysta z service-role oraz prywatnego klucza VAPID.
-- Service Worker pomija powiadomienie, gdy aktywne okno ma otwarty czat. W pozostałych przypadkach pokazuje nazwę nadawcy i maksymalnie 120 znaków treści; kliknięcie otwiera lub fokusuje `/?view=chat`.
+- Service Worker pomija powiadomienie wyłącznie wtedy, gdy aktywne okno ma otwartą tę samą rozmowę. W pozostałych przypadkach pokazuje nazwę nadawcy i maksymalnie 120 znaków treści; kliknięcie otwiera lub fokusuje adres właściwej rozmowy.
 - Rozwinięte powiadomienie używa pełnokolorowej ikony aplikacji, natomiast Android otrzymuje osobny monochromatyczny `badge` 96×96 z białym symbolem i przezroczystym tłem, aby pasek statusu i ekran blokady nie pokazywały białego kwadratu.
 - Dodanie kolejnych powiadomień, np. o nowych elementach list, wymaga nowego producenta `notification_event` i szablonu payloadu, bez zmiany subskrypcji, retry ani Service Workera.
 
@@ -261,6 +264,6 @@ Podstawowe polecenia weryfikacyjne:
 ### 11.2. Testy czatu
 
 - Testy jednostkowe obejmują scalanie i kolejność wiadomości, wpisy optymistyczne, wybór najnowszej odebranej wiadomości oraz skracanie podglądu push.
-- Testy DB obejmują wymuszanie nadawcy, niemutowalność wiadomości, recipienta zdarzenia, prywatność subskrypcji oraz monotoniczne kursory dostarczenia i odczytu.
-- Test dwóch kontekstów przeglądarki obejmuje Realtime, wskaźnik nieprzeczytanych, status dostarczenia i odczytu, sygnał pisania oraz wysłanie wiadomości offline i synchronizację po odzyskaniu sieci.
+- Testy DB obejmują wymuszanie nadawcy, niemutowalność wiadomości, izolację rozmów przed trzecim użytkownikiem, właściwego odbiorcę zdarzenia, prywatność subskrypcji oraz monotoniczne kursory dostarczenia i odczytu.
+- Test trzech kontekstów przeglądarki obejmuje Realtime, izolację rozmowy, wskaźnik nieprzeczytanych, status dostarczenia i odczytu, sygnał pisania oraz wysłanie wiadomości offline i synchronizację po odzyskaniu sieci.
 - Test PWA obejmuje ochronę dispatchera oraz obecność handlerów `push` i `notificationclick` w Service Workerze.

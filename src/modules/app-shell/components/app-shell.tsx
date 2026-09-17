@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react'
 
 import { AuthProvider, LoginView, useAuth } from '@/src/modules/auth'
 import { CategoriesView, useCategories } from '@/src/modules/categories'
-import { ChatView, useChat } from '@/src/modules/chat'
+import { ChatInboxView, ChatView, useChat, useChatInbox } from '@/src/modules/chat'
 import { I18nProvider } from '@/src/modules/i18n'
 import { ListView, useItemComposer, useListItems } from '@/src/modules/list-items'
 import { HomeView, useLists } from '@/src/modules/lists'
@@ -21,17 +21,27 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   const {
     tab,
     listId: openListId,
+    conversationId,
     openList: navigateToList,
+    openConversation: navigateToConversation,
     selectTab,
     backToLists,
     replaceWithLists,
+    backToChatInbox,
+    replaceWithChatInbox,
   } = useAppNavigation()
   const listsState = useLists(userId)
   const categoriesState = useCategories(userId)
   const itemsState = useListItems(userId)
   const offlineState = useOfflineSync(userId)
   const profilesState = useProfiles(userId)
-  const chatState = useChat(userId, tab === 'chat')
+  const chatInboxState = useChatInbox(userId)
+  const chatState = useChat(
+    userId,
+    conversationId,
+    tab === 'chat' && conversationId !== null,
+    chatInboxState.refresh,
+  )
   const pushState = usePushNotifications(userId)
 
   const openList = useMemo(
@@ -49,6 +59,17 @@ function AuthenticatedApp({ userId }: { userId: string }) {
     addItem: itemsState.addItem,
     updateCategory: categoriesState.updateCategory,
   })
+  const currentProfile = useMemo(
+    () => profilesState.profiles.find(({ id }) => id === userId) ?? null,
+    [profilesState.profiles, userId],
+  )
+  const selectedConversation = useMemo(
+    () =>
+      chatInboxState.conversations.find(
+        (conversation) => conversation.conversation_id === conversationId,
+      ) ?? null,
+    [chatInboxState.conversations, conversationId],
+  )
 
   const isLoading =
     listsState.isLoading || categoriesState.isLoading || itemsState.isLoading
@@ -56,7 +77,8 @@ function AuthenticatedApp({ userId }: { userId: string }) {
     listsState.error ??
     categoriesState.error ??
     itemsState.error ??
-    profilesState.error
+    profilesState.error ??
+    chatInboxState.error
 
   const handleLogout = async () => {
     try {
@@ -69,6 +91,21 @@ function AuthenticatedApp({ userId }: { userId: string }) {
   useEffect(() => {
     if (!listsState.isLoading && openListId && !openList) replaceWithLists()
   }, [listsState.isLoading, openList, openListId, replaceWithLists])
+
+  useEffect(() => {
+    if (
+      !chatInboxState.isLoading &&
+      conversationId &&
+      !selectedConversation
+    ) {
+      replaceWithChatInbox()
+    }
+  }, [
+    chatInboxState.isLoading,
+    conversationId,
+    selectedConversation,
+    replaceWithChatInbox,
+  ])
 
   if (isLoading) return <AppLoading />
 
@@ -117,30 +154,49 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       )}
 
       {tab === 'chat' && (
-        <ChatView
-          currentUserId={userId}
-          profiles={profilesState.profiles}
-          messages={chatState.messages}
-          isLoading={chatState.isLoading}
-          isLoadingOlder={chatState.isLoadingOlder}
-          hasOlder={chatState.hasOlder}
-          error={chatState.error}
-          isPeerTyping={chatState.isPeerTyping}
-          push={pushState}
-          onSendMessage={chatState.sendMessage}
-          onRetryMessage={chatState.retryMessage}
-          onLoadOlder={chatState.loadOlder}
-          onMarkReadThrough={chatState.markReadThrough}
-          onTypingChange={chatState.setTyping}
-          onUpdateDisplayName={profilesState.updateDisplayName}
-        />
+        selectedConversation ? (
+          <ChatView
+            currentUserId={userId}
+            currentProfile={currentProfile}
+            peer={{
+              id: selectedConversation.peer_id,
+              email: selectedConversation.peer_email,
+              display_name: selectedConversation.peer_display_name,
+            }}
+            messages={chatState.messages}
+            isLoading={chatState.isLoading}
+            isLoadingOlder={chatState.isLoadingOlder}
+            hasOlder={chatState.hasOlder}
+            error={chatState.error}
+            isPeerTyping={chatState.isPeerTyping}
+            push={pushState}
+            onSendMessage={chatState.sendMessage}
+            onRetryMessage={chatState.retryMessage}
+            onLoadOlder={chatState.loadOlder}
+            onMarkReadThrough={chatState.markReadThrough}
+            onTypingChange={chatState.setTyping}
+            onUpdateDisplayName={profilesState.updateDisplayName}
+            onBack={backToChatInbox}
+          />
+        ) : (
+          <ChatInboxView
+            currentUserId={userId}
+            currentProfile={currentProfile}
+            conversations={chatInboxState.conversations}
+            isLoading={chatInboxState.isLoading}
+            error={chatInboxState.error}
+            push={pushState}
+            onOpenConversation={navigateToConversation}
+            onUpdateDisplayName={profilesState.updateDisplayName}
+          />
+        )
       )}
 
       {!inList && (
         <BottomNav
           active={tab}
           onChange={selectTab}
-          unreadChatCount={chatState.unreadCount}
+          unreadChatCount={chatInboxState.unreadCount}
           onLogout={() => void handleLogout()}
         />
       )}

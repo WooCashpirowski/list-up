@@ -8,7 +8,7 @@ const APP_NAVIGATION_EVENT = 'list-up:navigation'
 const APP_HISTORY_STATE_KEY = 'listUpNavigation'
 
 type AppHistoryState = {
-  parent: 'home'
+  parent: 'home' | 'chat'
 }
 
 function subscribe(onStoreChange: () => void): () => void {
@@ -55,8 +55,8 @@ function getAppHistoryState(): AppHistoryState | null {
   const state: unknown = window.history.state?.[APP_HISTORY_STATE_KEY]
   if (state === null || typeof state !== 'object') return null
 
-  return 'parent' in state && state.parent === 'home'
-    ? { parent: 'home' }
+  return 'parent' in state && (state.parent === 'home' || state.parent === 'chat')
+    ? { parent: state.parent }
     : null
 }
 
@@ -65,6 +65,8 @@ export function useAppNavigation() {
   const searchParams = new URLSearchParams(search)
   const listId = searchParams.get('list')?.trim() || null
   const view = searchParams.get('view')
+  const conversationId =
+    view === 'chat' ? searchParams.get('conversation')?.trim() || null : null
   const tab: AppTab = !listId
     ? view === 'categories'
       ? 'categories'
@@ -90,6 +92,16 @@ export function useAppNavigation() {
     updateUrl(nextSearch, 'push')
   }, [])
 
+  const openConversation = useCallback((id: string) => {
+    const nextSearch = `?${new URLSearchParams({
+      view: 'chat',
+      conversation: id,
+    }).toString()}`
+    if (window.location.search === nextSearch) return
+
+    updateUrl(nextSearch, 'push', { parent: 'chat' })
+  }, [])
+
   const backToLists = useCallback(() => {
     if (getAppHistoryState()?.parent === 'home') {
       window.history.back()
@@ -104,12 +116,30 @@ export function useAppNavigation() {
     updateUrl('', 'replace')
   }, [])
 
+  const backToChatInbox = useCallback(() => {
+    if (getAppHistoryState()?.parent === 'chat') {
+      window.history.back()
+      return
+    }
+
+    updateUrl('?view=chat', 'replace')
+  }, [])
+
+  const replaceWithChatInbox = useCallback(() => {
+    if (window.location.search === '?view=chat') return
+    updateUrl('?view=chat', 'replace')
+  }, [])
+
   return {
     tab,
     listId,
+    conversationId,
     openList,
+    openConversation,
     selectTab,
     backToLists,
     replaceWithLists,
+    backToChatInbox,
+    replaceWithChatInbox,
   }
 }

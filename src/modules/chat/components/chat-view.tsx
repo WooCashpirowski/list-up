@@ -1,6 +1,7 @@
 'use client'
 
 import {
+  ArrowLeft,
   Bell,
   BellOff,
   Check,
@@ -35,7 +36,7 @@ import type {
   ChatMessageDeliveryStatus,
 } from '../types/chat.types'
 
-type ChatParticipant = {
+export type ChatParticipant = {
   id: string
   email: string
   display_name: string
@@ -43,7 +44,8 @@ type ChatParticipant = {
 
 type ChatViewProps = {
   currentUserId: string
-  profiles: ChatParticipant[]
+  currentProfile: ChatParticipant | null
+  peer: ChatParticipant
   messages: ChatMessage[]
   isLoading: boolean
   isLoadingOlder: boolean
@@ -57,6 +59,7 @@ type ChatViewProps = {
   onMarkReadThrough: (sequence: number) => Promise<void>
   onTypingChange: (isTyping: boolean) => void
   onUpdateDisplayName: (displayName: string) => Promise<boolean>
+  onBack: () => void
 }
 
 type MessageBubbleProps = {
@@ -181,7 +184,8 @@ function dateKey(value: string): string {
 
 export function ChatView({
   currentUserId,
-  profiles,
+  currentProfile,
+  peer,
   messages,
   isLoading,
   isLoadingOlder,
@@ -195,6 +199,7 @@ export function ChatView({
   onMarkReadThrough,
   onTypingChange,
   onUpdateDisplayName,
+  onBack,
 }: ChatViewProps) {
   const { locale, t } = useI18n()
   const [draft, setDraft] = useState('')
@@ -211,17 +216,7 @@ export function ChatView({
     () => getLatestIncomingSequence(messages, currentUserId),
     [currentUserId, messages],
   )
-  const names = useMemo(
-    () =>
-      new Map(
-        profiles.map((profile) => [profile.id, getProfileDisplayName(profile)]),
-      ),
-    [profiles],
-  )
-  const peerName = useMemo(() => {
-    const peer = profiles.find(({ id }) => id !== currentUserId)
-    return peer ? getProfileDisplayName(peer) : t('chat.otherPerson')
-  }, [currentUserId, profiles, t])
+  const peerName = useMemo(() => getProfileDisplayName(peer), [peer])
   const deliveryLabels = useMemo<
     Record<Exclude<ChatMessageDeliveryStatus, 'failed'>, string>
   >(
@@ -339,14 +334,19 @@ export function ChatView({
   return (
     <div className="relative mx-auto flex h-dvh w-full max-w-md flex-col">
       <header className="surface-glass z-20 flex items-center justify-between gap-3 border-b border-border bg-card/82 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-xl">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="brand-mark flex size-11 shrink-0 items-center justify-center rounded-2xl text-primary-foreground">
-            <MessageCircle className="size-6" />
-          </span>
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label={t('chat.backToInbox')}
+            className="surface-card flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border bg-card/90"
+          >
+            <ArrowLeft className="size-5" />
+          </button>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight">{t('chat.title')}</h1>
+            <h1 className="truncate text-xl font-semibold tracking-tight">{peerName}</h1>
             <p className="truncate text-xs text-muted-foreground">
-              {t('chat.description')}
+              {peer.email}
             </p>
           </div>
         </div>
@@ -444,7 +444,7 @@ export function ChatView({
                   <MessageBubble
                     message={message}
                     own={own}
-                    senderName={names.get(message.sender_id) ?? t('chat.otherPerson')}
+                    senderName={peerName}
                     time={timeFormatter.format(new Date(message.created_at))}
                     isLatestIncoming={message.sequence === latestIncomingSequence}
                     latestIncomingRef={latestIncomingRef}
@@ -533,7 +533,7 @@ export function ChatView({
 
       {showSettings && (
         <ChatSettings
-          currentProfile={profiles.find(({ id }) => id === currentUserId) ?? null}
+          currentProfile={currentProfile}
           push={push}
           onClose={() => setShowSettings(false)}
           onUpdateDisplayName={onUpdateDisplayName}
@@ -543,7 +543,7 @@ export function ChatView({
   )
 }
 
-function ChatSettings({
+export function ChatSettings({
   currentProfile,
   push,
   onClose,

@@ -1,3 +1,7 @@
-export { ChatView } from './components'
-export { useChat } from './hooks'
-export type { ChatMessage, ChatMessageDeliveryStatus } from './types'
+export { ChatInboxView, ChatView } from './components'
+export { useChat, useChatInbox } from './hooks'
+export type {
+  ChatConversationSummary,
+  ChatMessage,
+  ChatMessageDeliveryStatus,
+} from './types'

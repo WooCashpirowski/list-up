@@ -2,6 +2,7 @@ export { OfflineStatus } from './components/offline-status'
 export { useOfflineSync } from './hooks/use-offline-sync'
 export {
   getCachedCollection,
+  migrateLegacyChatStorage,
   getOutboxMutations,
   OUTBOX_CHANGED_EVENT,
   OUTBOX_STATUS_EVENT,

@@ -1,4 +1,5 @@
 import type {
+  ChatConversationSummary,
   ChatReadState,
   ChatReceiptEvent,
   ChatReceiptState,
@@ -16,14 +17,23 @@ export type ChatSubscriptionHandlers = {
 }
 
 export type ChatLiveSession = {
-  publishReceipt: (receipt: Omit<ChatReceiptEvent, 'user_id'>) => Promise<void>
   setTyping: (isTyping: boolean) => Promise<void>
   unsubscribe: () => void
 }
 
+export type ChatInboxSubscriptionHandlers = {
+  onChanged: () => void
+  onMessage: (message: PersistedChatMessage) => void
+}
+
 export interface ChatGateway {
-  getLatestMessages: (limit: number) => Promise<PersistedChatMessage[]>
+  getInbox: () => Promise<ChatConversationSummary[]>
+  getLatestMessages: (
+    conversationId: string,
+    limit: number,
+  ) => Promise<PersistedChatMessage[]>
   getMessagesBefore: (
+    conversationId: string,
     sequence: number,
     limit: number,
   ) => Promise<PersistedChatMessage[]>
@@ -31,11 +41,16 @@ export interface ChatGateway {
     input: CreateChatMessageInput,
   ) => Promise<PersistedChatMessage>
   getUnreadCount: () => Promise<number>
-  getPeerReceipt: () => Promise<ChatReceiptState>
+  getPeerReceipt: (conversationId: string) => Promise<ChatReceiptState>
   markDeliveredThrough: (sequence: number) => Promise<number>
   markReadThrough: (sequence: number) => Promise<number>
   subscribe: (
     userId: string,
+    conversationId: string,
     handlers: ChatSubscriptionHandlers,
   ) => ChatLiveSession
+  subscribeInbox: (
+    userId: string,
+    handlers: ChatInboxSubscriptionHandlers,
+  ) => () => void
 }
