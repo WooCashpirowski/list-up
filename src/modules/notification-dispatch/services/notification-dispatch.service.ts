@@ -21,7 +21,7 @@ type DispatchSummary = {
 const DELIVERY_CONCURRENCY = 10
 
 function createAdminClient(): SupabaseClient<Database> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
   const secret = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!url || !secret) throw new Error('Missing Supabase server credentials')
 
