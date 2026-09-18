@@ -112,7 +112,9 @@ operacyjny urządzenia.
 
 ## Lokalna konfiguracja
 
-`.env.local` wskazuje stagingowy Supabase podczas zwykłej pracy lokalnej. `.env.test.local` przechowuje konta E2E oraz stagingowy service-role. Oba pliki są ignorowane przez Git.
+`.env.staging.local` wskazuje stagingowy Supabase. `npm run dev:staging` wybiera to środowisko jawnie. `.env.test.local` przechowuje stagingowe konta E2E oraz service-role i jest czytany wyłącznie przy jawnym wyborze stagingu (`npm run test:e2e:staging`). Pliki są ignorowane przez Git.
+
+`.env.local` jest generowany przez `npm run local:up` i wskazuje lokalny Supabase działający w Dockerze. Domyślne testy korzystają z tego środowiska. Zobacz [lokalne środowisko Docker](local-development.md).
 
 Sekrety VAPID i webhooka są potrzebne lokalnie tylko podczas świadomego testowania dispatchera. Zdalny Supabase nie wywoła `http://localhost:3000`; do pełnego testu Web Push należy użyć wdrożonego stagingu.
 

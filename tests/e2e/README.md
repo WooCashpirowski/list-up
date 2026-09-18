@@ -2,10 +2,15 @@
 
 ## Configuration
 
-Copy `.env.test.example` to `.env.test.local` and provide three confirmed
-Supabase Auth accounts created by an administrator. `.env.test.local` is ignored
-by Git. Variables already present in `.env.local` do not need to be duplicated.
-Both files must point to the staging Supabase project. Never run the database
+Start the Docker environment with `npm run local:up`, then run
+`npm run test:e2e:local`. The generated `.env.local` contains local Supabase
+keys and three confirmed test accounts. The default environment is local;
+the loader never reads the staging `.env.test.local` implicitly. See the
+[local runbook](../../docs/local-development.md).
+
+For explicit staging runs use `npm run test:e2e:staging`. This loads
+`.env.staging.local` and `.env.test.local` (copy `.env.test.example` and provide
+three confirmed administrator-created staging accounts). Never run the database
 or browser E2E suites against production. See the
 [staging runbook](../../docs/staging.md) for the environment topology and
 verification checklist.
@@ -26,7 +31,7 @@ E2E_SUPABASE_SERVICE_ROLE_KEY=replace-me-for-tests-only
 
 The second and third accounts plus the service-role value are required by the
 chat RLS, conversation-isolation, recipient, and notification-outbox integration
-tests. Keep the service-role key in the ignored `.env.test.local`; it must never
+tests. Keep the service-role key in the ignored environment file; it must never
 be exposed to browser code.
 
 ## Commands

@@ -62,6 +62,9 @@ export default defineConfig([
   ...nextTypeScript,
   globalIgnores([
     '.next/**',
+    '.local/**',
+    'supabase/.temp/**',
+    'supabase/.branches/**',
     'out/**',
     'build/**',
     'next-env.d.ts',
