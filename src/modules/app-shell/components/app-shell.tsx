@@ -57,6 +57,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
     listId: activeListId,
     categories: categoriesState.categories,
     addItem: itemsState.addItem,
+    createCategory: categoriesState.createCategory,
     updateCategory: categoriesState.updateCategory,
   })
   const currentProfile = useMemo(
@@ -119,6 +120,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       {tab === 'home' &&
         (openList ? (
           <ListView
+            key={openList.id}
             list={openList}
             categories={categoriesState.categories}
             items={openListItems}
@@ -128,6 +130,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
             onAssignPendingItem={composer.assignPendingItem}
             onKeepPendingItemUncategorized={composer.keepPendingItemUncategorized}
             onCancelPendingItem={composer.cancelPendingItem}
+            onCreateCategoryAndAssignPendingItem={composer.createCategoryAndAssignPendingItem}
             onToggleItem={itemsState.toggleItem}
             onDeleteItem={itemsState.deleteItem}
             onClearItems={itemsState.clearItems}

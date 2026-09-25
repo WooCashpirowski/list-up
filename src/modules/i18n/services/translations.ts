@@ -139,7 +139,10 @@ const en = {
     'list.quantityPlaceholder': 'Qty',
     'list.addItem': 'Add item',
     'list.addTodoItem': 'Add task',
-    'list.autoCategory': 'Auto',
+    'list.changeCategory': 'Change',
+    'list.changeCategoryLabel': '{{name}} · Change category',
+    'list.categoryForItem': 'Choose a category for “{{name}}”.',
+    'list.useOther': 'Use Other',
     'list.empty': 'This list is empty',
     'list.emptyDescription': 'Add your first item above.',
     'list.emptyTodoDescription': 'Add your first task above.',
@@ -151,6 +154,11 @@ const en = {
         'We could not recognize “{{name}}”. Your choice will be remembered.',
     'list.cancelAdding': 'Cancel adding item',
     'list.saveOther': 'Save in Other',
+    'list.createCategory': 'Create category',
+    'list.createCategoryDescription': '“{{name}}” will be added to this category.',
+    'list.createCategoryAndAdd': 'Create and add item',
+    'list.backToCategories': 'Back',
+    'list.createCategoryError': 'Could not finish saving. Your details are still here. Please try again.',
 } as const;
 
 export type TranslationKey = keyof typeof en;
@@ -298,7 +306,10 @@ const pl: Record<TranslationKey, string> = {
     'list.quantityPlaceholder': 'Ilość',
     'list.addItem': 'Dodaj produkt',
     'list.addTodoItem': 'Dodaj zadanie',
-    'list.autoCategory': 'Auto',
+    'list.changeCategory': 'Zmień',
+    'list.changeCategoryLabel': '{{name}} · Zmień kategorię',
+    'list.categoryForItem': 'Wybierz kategorię dla „{{name}}”.',
+    'list.useOther': 'Bez kategorii',
     'list.empty': 'Ta lista jest pusta',
     'list.emptyDescription': 'Dodaj pierwszy produkt powyżej.',
     'list.emptyTodoDescription': 'Dodaj pierwsze zadanie powyżej.',
@@ -310,6 +321,11 @@ const pl: Record<TranslationKey, string> = {
         'Nie rozpoznaliśmy „{{name}}”. Twój wybór zostanie zapamiętany.',
     'list.cancelAdding': 'Anuluj dodawanie produktu',
     'list.saveOther': 'Zapisz w Inne',
+    'list.createCategory': 'Utwórz kategorię',
+    'list.createCategoryDescription': 'Produkt „{{name}}” zostanie dodany do tej kategorii.',
+    'list.createCategoryAndAdd': 'Utwórz i dodaj produkt',
+    'list.backToCategories': 'Wstecz',
+    'list.createCategoryError': 'Nie udało się dokończyć zapisu. Twoje dane zostały zachowane. Spróbuj ponownie.',
 };
 
 export const translations: Record<Locale, Record<TranslationKey, string>> = {

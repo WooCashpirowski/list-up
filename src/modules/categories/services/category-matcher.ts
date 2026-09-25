@@ -8,10 +8,10 @@ function normalize(value: string): string {
     .toLocaleLowerCase('pl')
 }
 
-export function findCategoryForItem(
+export function findCategoryForItem<T extends Pick<Category, 'name' | 'keywords'>>(
   itemName: string,
-  categories: Category[],
-): Category | null {
+  categories: T[],
+): T | null {
   const normalizedName = normalize(itemName)
 
   if (!normalizedName) {

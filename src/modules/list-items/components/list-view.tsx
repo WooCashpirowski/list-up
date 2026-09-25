@@ -1,5 +1,6 @@
 'use client'
 
+import { Dialog } from '@base-ui/react/dialog'
 import {
   closestCenter,
   DndContext,
@@ -23,20 +24,20 @@ import {
   Eraser,
   GripVertical,
   Plus,
-  Sparkles,
   Trash2,
   X,
 } from 'lucide-react'
-import { memo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ThemeToggle } from '@/components/theme-toggle'
-import { SwipeToDelete } from '@/components/ui/swipe-to-delete'
+import { SwipeActions } from '@/components/ui/swipe-actions'
 import { cn } from '@/lib/utils'
-import { getCategoryEmoji } from '@/src/modules/categories'
+import { findCategoryForItem, getCategoryEmoji } from '@/src/modules/categories'
 import { LanguageToggle, useI18n } from '@/src/modules/i18n'
 
 import type { PendingItem } from '../hooks/use-item-composer'
 import { useListViewModel } from '../hooks/use-list-view-model'
+import { useStickyHeader } from '../hooks/use-sticky-header'
 import type { CategoryGroup } from '../model/list-view.model'
 import type { ListItem } from '../types/list-item.types'
 import type {
@@ -59,6 +60,7 @@ type ListViewProps = {
   onAssignPendingItem: (categoryId: string) => Promise<boolean>
   onKeepPendingItemUncategorized: () => Promise<boolean>
   onCancelPendingItem: () => void
+  onCreateCategoryAndAssignPendingItem: (name: string) => Promise<boolean>
   onToggleItem: (id: string) => Promise<void>
   onDeleteItem: (id: string) => Promise<void>
   onClearItems: (listId: string, onlyDone?: boolean) => Promise<void>
@@ -81,11 +83,15 @@ const ItemRow = memo(function ItemRow({
     <li
       className={index !== 0 ? 'border-t border-border/70' : undefined}
     >
-      <SwipeToDelete onDelete={() => onDelete(item.id)}>
+      <SwipeActions
+        onComplete={() => (item.is_done ? undefined : onToggle(item.id))}
+        onDelete={() => onDelete(item.id)}
+      >
         <div className="flex items-center gap-1 pr-2">
           <button
             onClick={() => void onToggle(item.id)}
             aria-label={t('list.toggleItem', { name: item.name })}
+            aria-pressed={item.is_done}
             className="flex flex-1 items-center gap-3 py-3.5 pl-3 text-left"
           >
             <span
@@ -122,7 +128,7 @@ const ItemRow = memo(function ItemRow({
             <Trash2 className="size-4" />
           </button>
         </div>
-      </SwipeToDelete>
+      </SwipeActions>
     </li>
   )
 })
@@ -211,23 +217,42 @@ export function ListView({
   onAssignPendingItem,
   onKeepPendingItemUncategorized,
   onCancelPendingItem,
+  onCreateCategoryAndAssignPendingItem,
   onToggleItem,
   onDeleteItem,
   onClearItems,
 }: ListViewProps) {
   const { t } = useI18n()
-  const [name, setName] = useState('')
-  const [quantity, setQuantity] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string | 'auto'>('auto')
+  const [name, setName] = useState(pendingItem?.name ?? '')
+  const [quantity, setQuantity] = useState(pendingItem?.quantity ?? '')
+  const [selectedCategory, setSelectedCategory] = useState<string | null>('auto')
+  const [isCategoryPickerOpen, setIsCategoryPickerOpen] = useState(false)
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [categoryCreationFailed, setCategoryCreationFailed] = useState(false)
   const [categoryOrder, setCategoryOrder] = useState<string[]>([])
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set())
   const [isSubmitting, setIsSubmitting] = useState(false)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const quantityInputRef = useRef<HTMLInputElement>(null)
+  const createCategoryButtonRef = useRef<HTMLButtonElement>(null)
+  const pendingSubmissionRef = useRef(false)
   const sensors = useSensors(useSensor(PointerSensor), useSensor(TouchSensor))
   const isTodo = list.list_type === 'todo'
+  const { sentinelRef, isElevated } = useStickyHeader()
+  const activeCategory = useMemo(
+    () => selectedCategory === 'auto'
+      ? findCategoryForItem(name, categories)
+      : categories.find(({ id }) => id === selectedCategory) ?? null,
+    [categories, name, selectedCategory],
+  )
+  const categoryLabel = activeCategory?.name ?? t('list.other')
   const { completedCount, effectiveCategoryOrder, groups, todoItems } =
     useListViewModel(categories, items, categoryOrder, t('list.other'))
+
+  useEffect(() => {
+    if (!isCreatingCategory) createCategoryButtonRef.current?.focus()
+  }, [isCreatingCategory])
 
   async function submit() {
     if (!name.trim() || isSubmitting) return
@@ -235,23 +260,74 @@ export function ListView({
     const created = await onSubmitItem(
       name,
       isTodo ? '' : quantity,
-      isTodo ? null : selectedCategory,
+      isTodo || selectedCategory === null ? null : activeCategory?.id ?? 'auto',
     )
     if (created) {
       setName('')
       setQuantity('')
+      setSelectedCategory('auto')
       nameInputRef.current?.focus()
     }
     setIsSubmitting(false)
   }
 
   async function finishPending(action: () => Promise<boolean>) {
-    const created = await action()
-    if (created) {
-      setName('')
-      setQuantity('')
-      nameInputRef.current?.focus()
+    if (isSubmitting || pendingSubmissionRef.current) return false
+    pendingSubmissionRef.current = true
+    setIsSubmitting(true)
+    try {
+      const created = await action()
+      if (created) {
+        setName('')
+        setQuantity('')
+        setSelectedCategory('auto')
+        setIsCreatingCategory(false)
+        setNewCategoryName('')
+        setCategoryCreationFailed(false)
+      }
+      return created
+    } finally {
+      pendingSubmissionRef.current = false
+      setIsSubmitting(false)
     }
+  }
+
+  async function createCategoryAndAddItem() {
+    if (!newCategoryName.trim() || isSubmitting || pendingSubmissionRef.current) return
+    setCategoryCreationFailed(false)
+    try {
+      const created = await finishPending(
+        () => onCreateCategoryAndAssignPendingItem(newCategoryName),
+      )
+      if (!created) setCategoryCreationFailed(true)
+    } catch {
+      setCategoryCreationFailed(true)
+    }
+  }
+
+  function changeName(value: string) {
+    setName(value)
+    setSelectedCategory('auto')
+  }
+
+  function chooseCategory(categoryId: string | null) {
+    if (pendingItem) {
+      void finishPending(categoryId === null
+        ? onKeepPendingItemUncategorized
+        : () => onAssignPendingItem(categoryId))
+    } else {
+      setSelectedCategory(categoryId)
+      setIsCategoryPickerOpen(false)
+    }
+  }
+
+  function closeCategoryPicker() {
+    if (isSubmitting) return
+    setIsCategoryPickerOpen(false)
+    setIsCreatingCategory(false)
+    setNewCategoryName('')
+    setCategoryCreationFailed(false)
+    if (pendingItem) onCancelPendingItem()
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -276,11 +352,11 @@ export function ListView({
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col pb-32">
+      <div ref={sentinelRef} aria-hidden className="pointer-events-none -mb-px h-px shrink-0" />
       <header
-        className={cn(
-          'sticky top-0 z-20 border-b bg-background/82 backdrop-blur-xl',
-          list.list_type === 'todo' ? 'border-todo/18' : 'border-shopping/18',
-        )}
+        data-list-type={list.list_type}
+        data-elevated={isElevated}
+        className="list-header sticky top-0 z-20 transition-shadow duration-200 motion-reduce:transition-none"
       >
         <div className="flex items-center gap-2 px-3 pb-3 pt-12">
           <button
@@ -309,7 +385,7 @@ export function ListView({
           <ThemeToggle />
         </div>
 
-        <div className="px-4 pb-3">
+        <div className="relative px-4 pb-3">
           <div className="surface-card flex items-center gap-2 rounded-2xl border border-input bg-card/92 p-1.5 focus-within:border-primary/40">
             {isTodo ? (
               <input
@@ -331,7 +407,7 @@ export function ListView({
                 categories={categories}
                 inputRef={nameInputRef}
                 value={name}
-                onChange={setName}
+                onChange={changeName}
                 onSelect={(suggestion) =>
                   setSelectedCategory(suggestion.categoryId)
                 }
@@ -362,33 +438,19 @@ export function ListView({
               <Plus className="size-5" strokeWidth={2.5} />
             </button>
           </div>
-          {!isTodo && (
-            <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
-              <button
-                onClick={() => setSelectedCategory('auto')}
-                className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${
-                  selectedCategory === 'auto'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-secondary text-muted-foreground'
-                }`}
-              >
-                <Sparkles className="size-3" /> {t('list.autoCategory')}
-              </button>
-              {categories.map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => setSelectedCategory(category.id)}
-                  className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium ${
-                    selectedCategory === category.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary text-muted-foreground'
-                  }`}
-                >
-                  <span aria-hidden>{getCategoryEmoji(category.name)}</span>{' '}
-                  {category.name}
-                </button>
-              ))}
-            </div>
+          {!isTodo && name.trim() && (activeCategory || selectedCategory === null) && (
+            <button
+              onClick={() => setIsCategoryPickerOpen(true)}
+              disabled={isSubmitting}
+              aria-label={t('list.changeCategoryLabel', { name: categoryLabel })}
+              aria-haspopup="dialog"
+              className="mt-1.5 flex min-h-9 max-w-full items-center gap-1.5 rounded-xl px-2 text-xs text-muted-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50"
+            >
+              <span aria-hidden>{activeCategory ? getCategoryEmoji(activeCategory.name) : '📦'}</span>
+              <span className="truncate">{categoryLabel}</span>
+              <span aria-hidden>·</span>
+              <span className="shrink-0 font-medium text-primary">{t('list.changeCategory')}</span>
+            </button>
           )}
         </div>
       </header>
@@ -448,7 +510,7 @@ export function ListView({
       </div>
 
       {items.length > 0 && (
-        <div className="surface-glass fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-md gap-2 border-t border-border/70 bg-background/82 px-4 pb-6 pt-3 backdrop-blur-xl">
+        <div className="list-actions-bar fixed inset-x-0 bottom-0 z-20 mx-auto flex max-w-md gap-2 bg-background/82 px-4 pb-6 pt-3 backdrop-blur-xl">
           {completedCount > 0 && (
             <button
               onClick={() => void onClearItems(list.id, true)}
@@ -470,43 +532,132 @@ export function ListView({
         </div>
       )}
 
-      {!isTodo && pendingItem && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 p-4 sm:items-center">
-          <div role="dialog" aria-modal="true" aria-labelledby="category-dialog-title" className="surface-glass w-full max-w-md rounded-3xl border border-border bg-card/95 p-5 backdrop-blur-xl">
-            <div className="flex items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <h2 id="category-dialog-title" className="text-xl font-semibold">
-                  {t('list.chooseCategory')}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t('list.categoryUnknown', { name: pendingItem.name })}
-                </p>
-              </div>
-              <button onClick={onCancelPendingItem} aria-label={t('list.cancelAdding')} className="flex size-9 items-center justify-center rounded-full bg-secondary">
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <div className="mt-4 grid max-h-64 grid-cols-2 gap-2 overflow-y-auto">
-              {categories.map((category) => (
-                <button
-                  key={category.id}
-                  onClick={() => void finishPending(() => onAssignPendingItem(category.id))}
-                  className="flex items-center gap-2 rounded-2xl border border-transparent bg-secondary px-3 py-3 text-left text-sm font-medium transition-colors hover:border-primary/25 hover:bg-accent"
-                >
-                  <span aria-hidden>{getCategoryEmoji(category.name)}</span>
-                  <span className="truncate">{category.name}</span>
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => void finishPending(onKeepPendingItemUncategorized)}
-              className="mt-3 w-full rounded-2xl border border-border py-3 text-sm font-semibold"
+      {!isTodo && (
+        <Dialog.Root
+          open={Boolean(pendingItem) || isCategoryPickerOpen}
+          onOpenChange={(open) => { if (!open) closeCategoryPicker() }}
+        >
+          <Dialog.Portal>
+            <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/35" />
+            <Dialog.Popup
+              finalFocus={nameInputRef}
+              className="surface-glass fixed bottom-4 left-1/2 z-50 flex max-h-[85dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 flex-col rounded-3xl border border-border bg-card/95 p-5 backdrop-blur-xl sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2"
             >
-              {t('list.saveOther')}
-            </button>
-          </div>
-        </div>
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <Dialog.Title className="text-xl font-semibold">
+                    {t(isCreatingCategory ? 'list.createCategory' : 'list.chooseCategory')}
+                  </Dialog.Title>
+                  <Dialog.Description className="mt-1 break-words text-sm text-muted-foreground">
+                    {isCreatingCategory && pendingItem
+                      ? t('list.createCategoryDescription', { name: pendingItem.name })
+                      : pendingItem
+                        ? t('list.categoryUnknown', { name: pendingItem.name })
+                        : t('list.categoryForItem', { name: name.trim() })}
+                  </Dialog.Description>
+                </div>
+                <Dialog.Close
+                  disabled={isSubmitting}
+                  aria-label={t(pendingItem ? 'list.cancelAdding' : 'common.cancel')}
+                  className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary"
+                >
+                  <X className="size-4" />
+                </Dialog.Close>
+              </div>
+
+              {isCreatingCategory && pendingItem ? (
+                <form
+                  className="mt-5 overflow-y-auto"
+                  aria-busy={isSubmitting}
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void createCategoryAndAddItem()
+                  }}
+                >
+                  <label htmlFor="pending-category-name" className="mb-2 block text-sm font-semibold">
+                    {t('categories.name')}
+                  </label>
+                  <input
+                    id="pending-category-name"
+                    autoFocus
+                    required
+                    maxLength={120}
+                    value={newCategoryName}
+                    disabled={isSubmitting}
+                    onChange={(event) => {
+                      setNewCategoryName(event.target.value)
+                      setCategoryCreationFailed(false)
+                    }}
+                    className="w-full rounded-2xl border border-input bg-secondary px-4 py-3 text-base outline-none focus:border-primary disabled:opacity-50"
+                  />
+                  {categoryCreationFailed && (
+                    <p role="alert" className="mt-3 text-sm text-destructive">
+                      {t('list.createCategoryError')}
+                    </p>
+                  )}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => setIsCreatingCategory(false)}
+                      className="flex items-center justify-center gap-1 rounded-2xl border border-border px-4 py-3 text-sm font-semibold disabled:opacity-50"
+                    >
+                      <ChevronLeft aria-hidden className="size-4" />
+                      {t('list.backToCategories')}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSubmitting || !newCategoryName.trim()}
+                      className="primary-action flex-1 rounded-2xl px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                    >
+                      {t(isSubmitting ? 'categories.saving' : 'list.createCategoryAndAdd')}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="mt-4 grid max-h-64 grid-cols-2 gap-2 overflow-y-auto">
+                    {categories.map((category) => (
+                      <button
+                        key={category.id}
+                        onClick={() => chooseCategory(category.id)}
+                        disabled={isSubmitting}
+                        aria-pressed={!pendingItem && activeCategory?.id === category.id}
+                        className="flex items-center gap-2 rounded-2xl border border-transparent bg-secondary px-3 py-3 text-left text-sm font-medium transition-colors hover:border-primary/25 hover:bg-accent aria-pressed:border-primary/30 aria-pressed:bg-accent disabled:opacity-50"
+                      >
+                        <span aria-hidden>{getCategoryEmoji(category.name)}</span>
+                        <span className="truncate">{category.name}</span>
+                        {!pendingItem && activeCategory?.id === category.id && (
+                          <Check aria-hidden className="ml-auto size-4 shrink-0 text-primary" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <div className={cn('mt-3 grid gap-2', pendingItem && 'grid-cols-2')}>
+                    <button
+                      onClick={() => chooseCategory(null)}
+                      disabled={isSubmitting}
+                      aria-pressed={!pendingItem && selectedCategory === null}
+                      className="min-w-0 rounded-2xl border border-border px-3 py-3 text-sm font-semibold aria-pressed:border-primary/30 aria-pressed:bg-accent disabled:opacity-50"
+                    >
+                      {t(pendingItem ? 'list.saveOther' : 'list.useOther')}
+                    </button>
+                    {pendingItem && (
+                      <button
+                        ref={createCategoryButtonRef}
+                        onClick={() => setIsCreatingCategory(true)}
+                        disabled={isSubmitting}
+                        className="primary-action min-w-0 rounded-2xl px-3 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                      >
+                        {t('list.createCategory')}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
       )}
     </div>
   )

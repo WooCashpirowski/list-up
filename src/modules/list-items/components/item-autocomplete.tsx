@@ -48,7 +48,7 @@ export function ItemAutocomplete({
   }
 
   return (
-    <div className="relative min-w-0 flex-1">
+    <div className="min-w-0 flex-1">
       <input
         ref={inputRef}
         role="combobox"
@@ -100,7 +100,7 @@ export function ItemAutocomplete({
       />
 
       {isListboxVisible && (
-        <div className="surface-glass absolute left-0 top-[calc(100%+0.65rem)] z-50 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-2xl border border-border bg-popover/95 backdrop-blur-xl">
+        <div className="surface-glass absolute left-4 right-4 top-full z-50 overflow-hidden rounded-2xl border border-border bg-popover/95 backdrop-blur-xl">
           <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Search className="size-3.5" />
             {t('list.suggestions', { count: suggestions.length })}

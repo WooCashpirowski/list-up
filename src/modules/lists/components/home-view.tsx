@@ -19,7 +19,7 @@ import {
 } from 'react';
 
 import { ThemeToggle } from '@/components/theme-toggle';
-import { SwipeToDelete } from '@/components/ui/swipe-to-delete';
+import { SwipeActions } from '@/components/ui/swipe-actions';
 import { cn } from '@/lib/utils';
 import { LanguageToggle, useI18n } from '@/src/modules/i18n';
 
@@ -134,163 +134,167 @@ export function HomeView({
                     const isTodo = list.list_type === 'todo';
 
                     return (
-                        <SwipeToDelete
+                        <SwipeActions
                             key={list.id}
                             disabled={isEditing}
                             onDelete={() => requestDeleteList(list)}
                             className='rounded-3xl'
                             contentClassName='rounded-3xl'
                         >
-                        <article
-                            className={cn(
-                                'surface-card rounded-3xl border bg-card/95 p-3 transition-colors',
-                                isTodo
-                                    ? 'border-todo/18 hover:border-todo/35'
-                                    : 'border-shopping/18 hover:border-shopping/35',
-                            )}
-                        >
-                            <div className='flex items-center gap-2'>
-                                <button
-                                    onClick={() => onOpenList(list.id)}
-                                    className='group flex min-w-0 flex-1 items-center gap-4 rounded-2xl p-1 text-left transition-all active:scale-[0.98]'
-                                >
-                                    <span
-                                        role='img'
-                                        aria-label={
-                                            list.list_type === 'todo'
-                                                ? t('home.typeTodo')
-                                                : t('home.typeShopping')
-                                        }
-                                        className={cn(
-                                            'flex size-12 shrink-0 items-center justify-center rounded-2xl transition-colors',
-                                            isTodo
-                                                ? 'bg-todo-soft text-todo'
-                                                : 'bg-shopping-soft text-shopping',
-                                        )}
+                            <article
+                                className={cn(
+                                    'surface-card rounded-3xl border bg-card/95 p-3 transition-colors',
+                                    isTodo
+                                        ? 'border-todo/18 hover:border-todo/35'
+                                        : 'border-shopping/18 hover:border-shopping/35',
+                                )}
+                            >
+                                <div className='flex items-center gap-2'>
+                                    <button
+                                        onClick={() => onOpenList(list.id)}
+                                        className='group flex min-w-0 flex-1 items-center gap-4 rounded-2xl p-1 text-left transition-all active:scale-[0.98]'
                                     >
-                                        {list.list_type === 'todo' ? (
-                                            <Check
-                                                className='size-6'
-                                                strokeWidth={2.5}
-                                            />
-                                        ) : (
-                                            <ShoppingBasket
-                                                className='size-6'
-                                                strokeWidth={2}
-                                            />
-                                        )}
-                                    </span>
-                                    <span className='min-w-0 flex-1'>
-                                        <span className='block truncate text-base font-semibold text-foreground'>
-                                            {list.title}
-                                        </span>
                                         <span
-                                            className='mt-0.5 block text-sm text-muted-foreground'
-                                            dangerouslySetInnerHTML={{
-                                                __html: `${
-                                                    count.total === 0
-                                                        ? mounted
-                                                            ? t(
-                                                                  'home.emptyUpdated',
-                                                                  {
-                                                                      time: formatRelativeListTime(
-                                                                          list.updated_at,
-                                                                          locale,
-                                                                      ),
-                                                                  },
-                                                              )
-                                                            : t('home.empty')
-                                                        : mounted
-                                                          ? t(
-                                                                'home.itemsLeftUpdated',
-                                                                {
-                                                                    remaining:
-                                                                        count.remaining,
-                                                                    total: count.total,
-                                                                    time: formatRelativeListTime(
-                                                                        list.updated_at,
-                                                                        locale,
-                                                                    ),
-                                                                },
-                                                            )
-                                                          : t(
-                                                                'home.itemsLeft',
-                                                                {
-                                                                    remaining:
-                                                                        count.remaining,
-                                                                    total: count.total,
-                                                                },
-                                                            )
-                                                }`,
-                                            }}
-                                        ></span>
-                                    </span>
-                                    <ChevronRight className='size-5 shrink-0 text-muted-foreground/60' />
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setEditingId(list.id);
-                                        setDraftTitle(list.title);
-                                    }}
-                                    aria-label={t('home.rename', {
-                                        title: list.title,
-                                    })}
-                                    className='flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-primary'
-                                >
-                                    <Pencil className='size-4' />
-                                </button>
-                                <button
-                                    onClick={() =>
-                                        void requestDeleteList(list)
-                                    }
-                                    aria-label={t('home.delete', {
-                                        title: list.title,
-                                    })}
-                                    className='flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-destructive'
-                                >
-                                    <Trash2 className='size-4' />
-                                </button>
-                            </div>
-
-                            {isEditing && (
-                                <div className='mt-3 flex gap-2 border-t border-border/70 pt-3'>
-                                    <input
-                                        autoFocus
-                                        value={draftTitle}
-                                        onChange={(event) =>
-                                            setDraftTitle(event.target.value)
-                                        }
-                                        onKeyDown={(event) => {
-                                            if (event.key === 'Enter')
-                                                void submitRename(list.id);
-                                            if (event.key === 'Escape')
-                                                setEditingId(null);
+                                            role='img'
+                                            aria-label={
+                                                list.list_type === 'todo'
+                                                    ? t('home.typeTodo')
+                                                    : t('home.typeShopping')
+                                            }
+                                            className={cn(
+                                                'flex size-12 shrink-0 items-center justify-center rounded-2xl transition-colors',
+                                                isTodo
+                                                    ? 'bg-todo-soft text-todo'
+                                                    : 'bg-shopping-soft text-shopping',
+                                            )}
+                                        >
+                                            {list.list_type === 'todo' ? (
+                                                <Check
+                                                    className='size-6'
+                                                    strokeWidth={2.5}
+                                                />
+                                            ) : (
+                                                <ShoppingBasket
+                                                    className='size-6'
+                                                    strokeWidth={2}
+                                                />
+                                            )}
+                                        </span>
+                                        <span className='min-w-0 flex-1'>
+                                            <span className='block truncate text-base font-semibold text-foreground'>
+                                                {list.title}
+                                            </span>
+                                            <span
+                                                className='mt-0.5 block text-sm text-muted-foreground'
+                                                dangerouslySetInnerHTML={{
+                                                    __html: `${
+                                                        count.total === 0
+                                                            ? mounted
+                                                                ? t(
+                                                                      'home.emptyUpdated',
+                                                                      {
+                                                                          time: formatRelativeListTime(
+                                                                              list.updated_at,
+                                                                              locale,
+                                                                          ),
+                                                                      },
+                                                                  )
+                                                                : t(
+                                                                      'home.empty',
+                                                                  )
+                                                            : mounted
+                                                              ? t(
+                                                                    'home.itemsLeftUpdated',
+                                                                    {
+                                                                        remaining:
+                                                                            count.remaining,
+                                                                        total: count.total,
+                                                                        time: formatRelativeListTime(
+                                                                            list.updated_at,
+                                                                            locale,
+                                                                        ),
+                                                                    },
+                                                                )
+                                                              : t(
+                                                                    'home.itemsLeft',
+                                                                    {
+                                                                        remaining:
+                                                                            count.remaining,
+                                                                        total: count.total,
+                                                                    },
+                                                                )
+                                                    }`,
+                                                }}
+                                            ></span>
+                                        </span>
+                                        <ChevronRight className='size-5 shrink-0 text-muted-foreground/60' />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setEditingId(list.id);
+                                            setDraftTitle(list.title);
                                         }}
-                                        aria-label={t('home.newName', {
+                                        aria-label={t('home.rename', {
                                             title: list.title,
                                         })}
-                                        className='min-w-0 flex-1 rounded-xl border border-input bg-secondary px-3 py-2 text-sm outline-none focus:border-primary'
-                                    />
+                                        className='flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-primary'
+                                    >
+                                        <Pencil className='size-4' />
+                                    </button>
                                     <button
                                         onClick={() =>
-                                            void submitRename(list.id)
+                                            void requestDeleteList(list)
                                         }
-                                        aria-label={t('home.saveName')}
-                                        className='flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground'
+                                        aria-label={t('home.delete', {
+                                            title: list.title,
+                                        })}
+                                        className='flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-destructive'
                                     >
-                                        <Check className='size-4' />
-                                    </button>
-                                    <button
-                                        onClick={() => setEditingId(null)}
-                                        aria-label={t('home.cancelRename')}
-                                        className='flex size-9 items-center justify-center rounded-xl bg-secondary text-muted-foreground'
-                                    >
-                                        <X className='size-4' />
+                                        <Trash2 className='size-4' />
                                     </button>
                                 </div>
-                            )}
-                        </article>
-                        </SwipeToDelete>
+
+                                {isEditing && (
+                                    <div className='mt-3 flex gap-2 border-t border-border/70 pt-3'>
+                                        <input
+                                            autoFocus
+                                            value={draftTitle}
+                                            onChange={(event) =>
+                                                setDraftTitle(
+                                                    event.target.value,
+                                                )
+                                            }
+                                            onKeyDown={(event) => {
+                                                if (event.key === 'Enter')
+                                                    void submitRename(list.id);
+                                                if (event.key === 'Escape')
+                                                    setEditingId(null);
+                                            }}
+                                            aria-label={t('home.newName', {
+                                                title: list.title,
+                                            })}
+                                            className='min-w-0 flex-1 rounded-xl border border-input bg-secondary px-3 py-2 text-sm outline-none focus:border-primary'
+                                        />
+                                        <button
+                                            onClick={() =>
+                                                void submitRename(list.id)
+                                            }
+                                            aria-label={t('home.saveName')}
+                                            className='flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground'
+                                        >
+                                            <Check className='size-4' />
+                                        </button>
+                                        <button
+                                            onClick={() => setEditingId(null)}
+                                            aria-label={t('home.cancelRename')}
+                                            className='flex size-9 items-center justify-center rounded-xl bg-secondary text-muted-foreground'
+                                        >
+                                            <X className='size-4' />
+                                        </button>
+                                    </div>
+                                )}
+                            </article>
+                        </SwipeActions>
                     );
                 })}
 

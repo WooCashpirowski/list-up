@@ -21,6 +21,7 @@ type ItemComposerOptions = {
   listId: string | null
   categories: Category[]
   addItem: (input: AddListItemInput) => Promise<boolean>
+  createCategory: (name: string, keywords?: string[]) => Promise<string | null>
   updateCategory: (id: string, input: UpdateCategoryInput) => Promise<boolean>
 }
 
@@ -28,6 +29,7 @@ export function useItemComposer({
   listId,
   categories,
   addItem,
+  createCategory,
   updateCategory,
 }: ItemComposerOptions) {
   const [storedPendingItem, setStoredPendingItem] =
@@ -110,6 +112,35 @@ export function useItemComposer({
     [addItem, categories, listId, pendingItem, updateCategory],
   )
 
+  const createCategoryAndAssignPendingItem = useCallback(
+    async (name: string): Promise<boolean> => {
+      const trimmedName = name.trim()
+      if (!listId || !pendingItem || !trimmedName) return false
+
+      // Reuse a category that was created before a failed item save, or already exists.
+      const existingCategory = categories.find(
+        (category) => category.name.toLocaleLowerCase('pl') === trimmedName.toLocaleLowerCase('pl'),
+      )
+      if (existingCategory) return assignPendingItem(existingCategory.id)
+
+      const categoryId = await createCategory(trimmedName, [
+        pendingItem.name.trim().toLocaleLowerCase('pl'),
+      ])
+      if (!categoryId) return false
+
+      // Use the returned ID directly: this callback still has the pre-creation catalog.
+      const created = await addItem({
+        listId,
+        categoryId,
+        name: pendingItem.name,
+        quantity: pendingItem.quantity,
+      })
+      if (created) setStoredPendingItem(null)
+      return created
+    },
+    [addItem, assignPendingItem, categories, createCategory, listId, pendingItem],
+  )
+
   const keepPendingItemUncategorized = useCallback(async (): Promise<boolean> => {
     if (!listId || !pendingItem) return false
 
@@ -131,6 +162,7 @@ export function useItemComposer({
     pendingItem,
     submitItem,
     assignPendingItem,
+    createCategoryAndAssignPendingItem,
     keepPendingItemUncategorized,
     cancelPendingItem: () => setStoredPendingItem(null),
   }
