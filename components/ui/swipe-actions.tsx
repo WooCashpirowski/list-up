@@ -1,6 +1,6 @@
 'use client'
 
-import { Trash2 } from 'lucide-react'
+import { Check, Trash2 } from 'lucide-react'
 import {
   memo,
   useCallback,
@@ -36,11 +36,13 @@ type Gesture = {
   velocityX: number
 }
 
-type SwipeToDeleteProps = {
+type SwipeActionsProps = {
   children: ReactNode
   className?: string
   contentClassName?: string
   disabled?: boolean
+  /** When provided, swiping left completes the item instead of deleting it. */
+  onComplete?: () => void | Promise<void>
   onDelete: () => boolean | void | Promise<boolean | void>
 }
 
@@ -50,13 +52,14 @@ function getMotionDuration(): number {
     : MOTION_DURATION_MS
 }
 
-export const SwipeToDelete = memo(function SwipeToDelete({
+export const SwipeActions = memo(function SwipeActions({
   children,
   className,
   contentClassName,
   disabled = false,
+  onComplete,
   onDelete,
-}: SwipeToDeleteProps) {
+}: SwipeActionsProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const backgroundRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -68,6 +71,7 @@ export const SwipeToDelete = memo(function SwipeToDelete({
   const pendingOffsetRef = useRef(0)
   const suppressClickUntilRef = useRef(0)
   const mountedRef = useRef(true)
+  const onCompleteRef = useRef(onComplete)
   const onDeleteRef = useRef(onDelete)
   const gestureRef = useRef<Gesture>({
     axis: 'idle',
@@ -81,6 +85,7 @@ export const SwipeToDelete = memo(function SwipeToDelete({
     velocityX: 0,
   })
 
+  onCompleteRef.current = onComplete
   onDeleteRef.current = onDelete
 
   const clearAnimationFrame = useCallback(() => {
@@ -115,6 +120,8 @@ export const SwipeToDelete = memo(function SwipeToDelete({
     const inactiveIcon = offset >= 0 ? endIcon : startIcon
 
     content.style.transform = `translate3d(${offset}px, 0, 0)`
+    background.dataset.swipeAction =
+      offset < 0 && onCompleteRef.current ? 'complete' : 'delete'
     background.style.opacity = offset === 0 ? '0' : '1'
     activeIcon.style.opacity = String(0.45 + progress * 0.55)
     activeIcon.style.transform = `scale(${0.82 + progress * 0.18})`
@@ -191,7 +198,7 @@ export const SwipeToDelete = memo(function SwipeToDelete({
     [clearAnimationFrame, clearTimers],
   )
 
-  const completeDismiss = useCallback(
+  const completeSwipe = useCallback(
     (direction: -1 | 1) => {
       const root = rootRef.current
       const background = backgroundRef.current
@@ -202,12 +209,13 @@ export const SwipeToDelete = memo(function SwipeToDelete({
       const gesture = gestureRef.current
       const duration = getMotionDuration()
       const targetOffset = direction * root.getBoundingClientRect().width * 1.05
+      const isCompleting = direction === -1 && Boolean(onCompleteRef.current)
 
       gesture.axis = 'idle'
       gesture.dismissing = true
       gesture.offset = targetOffset
       gesture.pointerId = null
-      root.dataset.swipeState = 'dismissing'
+      root.dataset.swipeState = isCompleting ? 'completing' : 'dismissing'
       content.style.pointerEvents = 'none'
       content.style.transition = duration
         ? `transform ${duration}ms cubic-bezier(0.2, 0, 0, 1)`
@@ -215,18 +223,22 @@ export const SwipeToDelete = memo(function SwipeToDelete({
       background.style.transition = 'none'
       paintOffset(targetOffset)
 
-      const runDelete = async () => {
+      const runAction = async () => {
         animationTimerRef.current = null
         try {
-          const result = await onDeleteRef.current()
-          if (result === false && mountedRef.current) restorePosition(true)
+          const result = isCompleting
+            ? await onCompleteRef.current?.()
+            : await onDeleteRef.current()
+          if ((isCompleting || result === false) && mountedRef.current) {
+            restorePosition(true)
+          }
         } catch {
           if (mountedRef.current) restorePosition(true)
         }
       }
 
-      if (duration === 0) void runDelete()
-      else animationTimerRef.current = window.setTimeout(() => void runDelete(), duration)
+      if (duration === 0) void runAction()
+      else animationTimerRef.current = window.setTimeout(() => void runAction(), duration)
     },
     [clearAnimationFrame, paintOffset, restorePosition],
   )
@@ -356,9 +368,9 @@ export const SwipeToDelete = memo(function SwipeToDelete({
         return
       }
 
-      completeDismiss(gesture.offset >= 0 ? 1 : -1)
+      completeSwipe(gesture.offset >= 0 ? 1 : -1)
     },
-    [completeDismiss, restorePosition],
+    [completeSwipe, restorePosition],
   )
 
   const cancelPointerGesture = useCallback(
@@ -398,13 +410,13 @@ export const SwipeToDelete = memo(function SwipeToDelete({
     <div
       ref={rootRef}
       data-swipe-state="idle"
-      data-swipe-to-delete
+      data-swipe-actions
       className={cn('relative isolate overflow-hidden', className)}
     >
       <div
         ref={backgroundRef}
         aria-hidden
-        className="pointer-events-none absolute inset-0 flex items-center justify-between bg-destructive px-4 text-destructive-foreground opacity-0"
+        className="pointer-events-none absolute inset-0 flex items-center justify-between bg-destructive px-4 text-destructive-foreground opacity-0 data-[swipe-action=complete]:bg-success data-[swipe-action=complete]:text-success-foreground"
       >
         <span
           ref={startIconRef}
@@ -416,7 +428,11 @@ export const SwipeToDelete = memo(function SwipeToDelete({
           ref={endIconRef}
           className="flex size-11 items-center justify-center rounded-full opacity-0"
         >
-          <Trash2 className="size-5" strokeWidth={2.4} />
+          {onComplete ? (
+            <Check className="size-5" strokeWidth={2.4} />
+          ) : (
+            <Trash2 className="size-5" strokeWidth={2.4} />
+          )}
         </span>
       </div>
       <div

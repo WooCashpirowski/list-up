@@ -135,18 +135,21 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 
 - Element składa się z nazwy, opcjonalnej ilości i kategorii.
 - Pole nazwy udostępnia podpowiedzi na podstawie słownika `keywords` kategorii.
-- Kategoria może zostać wskazana ręcznie albo dopasowana automatycznie.
-- Jeżeli nazwa nie pasuje do słownika, modal pozwala przypisać ją do wybranej kategorii i rozszerzyć jej słownik albo zapisać element bez kategorii.
+- Kategoria jest domyślnie dopasowywana automatycznie do bieżącej nazwy. Formularz nie wyświetla przewijanego paska kategorii ani przycisku `Auto`.
+- Rozpoznany produkt pokazuje etykietę „Kategoria · Zmień”, która otwiera szufladę wyboru kategorii. Ręczna zmiana dotyczy bieżącego wpisu i nie dodaje produktu do listy; zapis następuje przyciskiem dodawania. Można też wybrać zapis bez kategorii.
+- Zmiana nazwy oraz udane dodanie elementu przywracają automatyczne dopasowanie kategorii. Po zapisie formularz czyści nazwę i ilość, również po zapisie przez szufladę. Kategoria poprzedniego produktu nie jest przenoszona na kolejny.
+- Jeżeli nazwa nie pasuje do słownika, próba dodania otwiera szufladę pozwalającą przypisać ją do wybranej kategorii i rozszerzyć jej słownik albo zapisać element bez kategorii.
+- Obok „Zapisz w Inne” przycisk „Utwórz kategorię” przełącza tę samą szufladę na formularz nazwy kategorii z automatycznym fokusem. „Wstecz” przywraca wybór kategorii bez utraty wpisu. Dopiero „Utwórz i dodaj produkt” tworzy kategorię wraz z frazą produktu w słowniku i dodaje do niej produkt z wpisaną ilością. Sukces zamyka szufladę i czyści formularz; błąd zachowuje dane do ponowienia. Ponowienie po częściowym zapisie wykorzystuje już utworzoną kategorię.
 - Elementy bez `category_id` są prezentowane w wirtualnej sekcji „Inne”; nie jest ona osobnym rekordem w bazie.
 - Elementy są grupowane według kategorii, a wykonane pozycje są wyświetlane na końcu grupy.
 - Sekcje można zwijać i zmieniać ich kolejność przez Drag & Drop. Oba ustawienia są stanem lokalnym bieżącego widoku i nie są synchronizowane.
 - Użytkownik może oznaczyć element jako wykonany, przywrócić go, usunąć, usunąć wszystkie wykonane albo wyczyścić całą listę.
-- Pojedynczy element można usunąć pełnym swipe'em w lewo lub w prawo. Niepełny albo anulowany gest przywraca element do pozycji początkowej bez mutacji.
+- Swipe elementu w lewo oznacza go jako wykonany i odsłania zielone tło z ikoną zaznaczenia; ponowienie gestu na wykonanym elemencie nie cofa oznaczenia. Swipe w prawo usuwa element i odsłania czerwone tło z ikoną kosza. Niepełny albo anulowany gest przywraca element do pozycji początkowej bez mutacji.
 
 ### 6.4. Lista todo
 
 - Lista todo jest płaską checklistą bez grup kategorii, wyboru kategorii, automatycznego dopasowania i Drag & Drop.
-- Elementy todo obsługują ten sam gest swipe-to-delete co elementy listy zakupowej.
+- Elementy todo obsługują te same gesty co elementy listy zakupowej: swipe w lewo oznacza wykonanie, a w prawo usuwa.
 - Nowy element otrzymuje `category_id = null` i `quantity = null`; formularz todo nie wyświetla pola ilości.
 - Niewykonane zadania są prezentowane przed wykonanymi.
 - Oznaczanie, przywracanie, pojedyncze usuwanie i czyszczenie działa tak samo jak na liście zakupowej.
@@ -192,8 +195,10 @@ Usunięcie listy usuwa jej elementy kaskadowo. Usunięcie kategorii pozostawia e
 - Paleta rozróżnia akcje główne, listy zakupowe, listy todo oraz stany: sukces, informacja, ostrzeżenie i błąd.
 - Każdy kolor tła posiada właściwy token tekstu/ikony, zapewniający odpowiedni kontrast w obu motywach.
 - Karty, sticky headers i dolna nawigacja tworzą spójny system powierzchni z subtelnymi obramowaniami, cieniami i efektem szkła.
+- Sticky header listy ma delikatny gradient w kolorze jej typu: zielony dla zakupów i fioletowy dla todo, bez dolnego dividera. Po przewinięciu pojawia się subtelny cień, który znika po powrocie na górę. Przejście respektuje `prefers-reduced-motion`.
+- Dolny fixed bar z akcjami listy nie ma górnego dividera; oddziela go cień skierowany ku górze. Oba paski używają wspólnego koloru cienia, z delikatną jasną poświatą w ciemnym motywie.
 - Interaktywne ikony posiadają etykiety dostępności, stany aktywne, focus i czytelny feedback operacji.
-- Swipe-to-delete rozpoznaje dominującą oś ruchu, nie blokuje pionowego przewijania i nie jest jedyną metodą wykonania akcji; dostępny pozostaje przycisk obsługiwany dotykiem, myszą i klawiaturą.
+- Gest swipe rozpoznaje dominującą oś ruchu, nie blokuje pionowego przewijania i nie jest jedyną metodą wykonania akcji; dostępny pozostaje przycisk obsługiwany dotykiem, myszą i klawiaturą.
 - Gest kończy akcję po przekroczeniu bezpiecznego progu pozycyjnego albo po krótszym, zdecydowanym flicku; drobny pionowy jitter palca nie anuluje ruchu poziomego.
 - Animacje swipe respektują `prefers-reduced-motion`, korzystają z transformacji kompozytora i nie powodują re-renderowania całej listy podczas ruchu wskaźnika.
 - Elementy list są memoizowane, a kosztowne sortowanie, filtrowanie i grupowanie korzysta z `useMemo`; callbacki mutacji pozostają stabilne tam, gdzie ma to wpływ na renderowanie.
@@ -209,7 +214,7 @@ Automatyczne testy Playwright obejmują co najmniej:
 - logowanie, wylogowanie oraz zapamiętywanie języka;
 - adresy widoków, bezpośrednie wejście do listy oraz nawigację Back i Forward między listą, wszystkimi listami i kategoriami;
 - CRUD listy zakupowej i jej elementów;
-- progowe usuwanie list i elementów swipe'em w obu kierunkach zdarzeniami myszy i dotyku, anulowanie niepełnego gestu oraz zachowanie alternatywnego przycisku usuwania;
+- progowe oznaczanie elementów shopping i todo jako wykonanych swipe'em w lewo, usuwanie elementów w prawo i całych list w obu kierunkach zdarzeniami myszy i dotyku, anulowanie niepełnego gestu oraz zachowanie alternatywnych przycisków;
 - utworzenie płaskiej listy todo z elementami bez kategorii;
 - pracę z kategoriami: tworzenie, zmiana nazwy, wyszukiwanie, edycja fraz i usuwanie;
 - odbieranie zmian list i elementów przez Supabase Realtime;

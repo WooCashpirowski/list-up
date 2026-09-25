@@ -167,6 +167,62 @@ async function touchDragAcross(
   await session.detach()
 }
 
+async function flickAcross(page: Page, target: Locator, horizontalRatio: number) {
+  const bounds = await target.boundingBox()
+  if (!bounds) throw new Error('Flick target is not visible')
+
+  const session = await page.context().newCDPSession(page)
+  const startX = bounds.x + bounds.width / 2
+  const y = bounds.y + bounds.height / 2
+  const endX = startX + bounds.width * horizontalRatio
+  const timestamp = Date.now() / 1000
+  try {
+    // Explicit event times keep velocity independent of test runner latency.
+    await session.send('Input.dispatchMouseEvent', {
+      type: 'mousePressed', x: startX, y, button: 'left', buttons: 1,
+      clickCount: 1, timestamp,
+    })
+    await session.send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved', x: endX, y, button: 'left', buttons: 1,
+      timestamp: timestamp + 0.016,
+    })
+    await session.send('Input.dispatchMouseEvent', {
+      type: 'mouseReleased', x: endX, y, button: 'left', buttons: 0,
+      clickCount: 1, timestamp: timestamp + 0.032,
+    })
+  } finally {
+    await session.detach()
+  }
+}
+
+async function expectSwipeFeedback(
+  row: Locator,
+  action: 'complete' | 'delete',
+  direction: 'left' | 'right',
+) {
+  await expect(row).toHaveAttribute('data-swipe-direction', direction)
+  const background = row.locator('[data-swipe-action]')
+  await expect(background).toHaveAttribute('data-swipe-action', action)
+  await expect(background).toHaveCSS('opacity', '1')
+  const color = await background.evaluate((element, token) => {
+    const sample = document.createElement('span')
+    sample.style.backgroundColor = `var(${token})`
+    element.append(sample)
+    const computedColor = getComputedStyle(sample).backgroundColor
+    sample.remove()
+    return computedColor
+  },
+    action === 'complete' ? '--success' : '--destructive',
+  )
+  await expect(background).toHaveCSS('background-color', color)
+  const icon = direction === 'left'
+    ? background.locator('span').last()
+    : background.locator('span').first()
+  await expect(icon.locator('svg')).toHaveClass(
+    action === 'complete' ? /lucide-check/ : /lucide-trash/,
+  )
+}
+
 test.describe('Shared Grocery & Todo UI with Supabase', () => {
   test.describe.configure({ mode: 'serial' })
   test.skip(!hasTestConfig, 'Set Supabase and admin-created E2E credentials')
@@ -316,9 +372,7 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await expect(fruitSuggestion).toBeVisible()
     await fruitSuggestion.click()
     await expect(itemInput).toHaveValue('jabłko')
-    await expect(page.getByRole('button', { name: /Owoce/ })).toHaveClass(
-      /bg-primary/,
-    )
+    await expect(page.getByRole('button', { name: 'Owoce · Change category' })).toBeVisible()
 
     await itemInput.fill(itemName)
     const quantityInput = page.getByPlaceholder('Qty')
@@ -326,6 +380,10 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await expect(quantityInput).toBeFocused()
     await quantityInput.fill('2')
     await quantityInput.press('Enter')
+    const categoryDialog = page.getByRole('dialog', { name: 'Choose a category' })
+    await expect(categoryDialog).toBeVisible()
+    await categoryDialog.getByRole('button', { name: 'Save in Other' }).click()
+    await expect(categoryDialog).toHaveCount(0)
     await expect(itemInput).toBeFocused()
 
     const item = page.getByText(itemName, { exact: true })
@@ -362,6 +420,309 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     await expectDatabaseCount(client, 'lists', renamedListTitle, 0)
     cleanupListTitles.delete(listTitle)
     cleanupListTitles.delete(renamedListTitle)
+  })
+
+  test('asks for a category for each unknown item after adding a suggestion', async ({
+    page,
+  }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const listTitle = `Playwright category reset ${suffix}`
+    const categoryName = `Playwright chosen category ${suffix}`
+    const assignedItem = `kaszka-${suffix}`
+    const uncategorizedItem = `unknown-${suffix}`
+    cleanupListTitles.add(listTitle)
+    cleanupCategoryNames.add(categoryName)
+
+    const { data: category, error: categoryError } = await client
+      .from('categories')
+      .insert({ name: categoryName, keywords: [] })
+      .select('id')
+      .single()
+    expect(categoryError).toBeNull()
+    const { data: alcohol, error: alcoholError } = await client
+      .from('categories')
+      .select('id')
+      .eq('name', 'Alkohol')
+      .single()
+    expect(alcoholError).toBeNull()
+    const { data: list, error: listError } = await client
+      .from('lists')
+      .insert({ title: listTitle, list_type: 'shopping' })
+      .select('id')
+      .single()
+    expect(listError).toBeNull()
+
+    await signInViaUi(page)
+    await page.getByText(listTitle, { exact: true }).click()
+    const itemInput = page.getByRole('combobox', { name: 'Item name' })
+    const addButton = page.getByRole('button', { name: 'Add item', exact: true })
+    const categoryDialog = page.getByRole('dialog', { name: 'Choose a category' })
+    const categoryHint = page.getByRole('button', { name: /Change category$/ })
+    await expect(page.getByRole('button', { name: 'Auto', exact: true })).toHaveCount(0)
+    await expect(categoryHint).toHaveCount(0)
+
+    await itemInput.fill('wino')
+    await page.getByRole('option', { name: /wino.*Alkohol/i }).click()
+    await expect(categoryHint).toHaveAccessibleName('Alkohol · Change category')
+    await addButton.click()
+    await expect(page.getByText('wino', { exact: true })).toBeVisible()
+    await expect(itemInput).toHaveValue('')
+
+    for (const itemName of [assignedItem, uncategorizedItem]) {
+      await itemInput.fill(itemName)
+      await expect(categoryHint).toHaveCount(0)
+      await page.getByPlaceholder('Qty').fill('2')
+      await addButton.click()
+      await expect(categoryDialog).toBeVisible()
+      await expect(categoryDialog).toContainText(itemName)
+      await expectDatabaseCount(client, 'list_items', itemName, 0)
+
+      if (itemName === assignedItem) {
+        await categoryDialog.getByRole('button', { name: 'Cancel adding item' }).click()
+        await expect(categoryDialog).toHaveCount(0)
+        await expect(itemInput).toHaveValue(itemName)
+        await addButton.click()
+        await expect(categoryDialog).toBeVisible()
+        await categoryDialog.getByRole('button', { name: categoryName, exact: true }).click()
+      } else {
+        await categoryDialog.getByRole('button', { name: 'Save in Other' }).click()
+      }
+
+      await expect(categoryDialog).toHaveCount(0)
+      await expect(page.getByText(itemName, { exact: true })).toBeVisible()
+      await expect(itemInput).toHaveValue('')
+      await expect(page.getByPlaceholder('Qty')).toHaveValue('')
+      await expect(categoryHint).toHaveCount(0)
+    }
+
+    await expect.poll(async () => {
+      const { data, error } = await client.from('list_items')
+        .select('name, category_id, quantity')
+        .eq('list_id', list!.id)
+        .order('name')
+      expect(error).toBeNull()
+      return data
+    }).toEqual([
+      { name: assignedItem, category_id: category!.id, quantity: '2' },
+      { name: uncategorizedItem, category_id: null, quantity: '2' },
+      { name: 'wino', category_id: alcohol!.id, quantity: null },
+    ])
+  })
+
+  test('creates a category and adds the pending item in the same drawer', async ({ page }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const listTitle = `Playwright new category flow ${suffix}`
+    const itemName = `unknown-${suffix}`
+    const categoryName = `Playwright new category ${suffix}`
+    cleanupListTitles.add(listTitle)
+    cleanupCategoryNames.add(categoryName)
+    const { data: list, error: listError } = await client.from('lists')
+      .insert({ title: listTitle, list_type: 'shopping' }).select('id').single()
+    expect(listError).toBeNull()
+
+    await signInViaUi(page)
+    await page.getByText(listTitle, { exact: true }).click()
+    const itemInput = page.getByRole('combobox', { name: 'Item name' })
+    const quantityInput = page.getByPlaceholder('Qty')
+    const categoryDialog = page.getByRole('dialog', { name: 'Choose a category' })
+    const createDialog = page.getByRole('dialog', { name: 'Create category', exact: true })
+    const categoryNameInput = page.getByLabel('Category name', { exact: true })
+    const createButton = createDialog.getByRole('button', { name: 'Create and add item' })
+    await itemInput.fill(itemName)
+    await quantityInput.fill('2')
+    await page.getByRole('button', { name: 'Add item', exact: true }).click()
+    await expect(categoryDialog.getByRole('button', { name: 'Save in Other' })).toBeVisible()
+    await categoryDialog.getByRole('button', { name: 'Create category', exact: true }).click()
+
+    await expect(page).toHaveURL(new RegExp(`\\?list=${list!.id}$`))
+    await expect(page.getByRole('dialog')).toHaveCount(1)
+    await expect(createDialog).toContainText(itemName)
+    await expect(categoryNameInput).toBeVisible()
+    await expect(categoryNameInput).toBeFocused()
+    await expect(categoryNameInput).toHaveValue('')
+    await expect(createButton).toBeDisabled()
+    await categoryNameInput.fill('   ')
+    await expect(createButton).toBeDisabled()
+    await categoryNameInput.fill(categoryName)
+    await expectDatabaseCount(client, 'categories', categoryName, 0)
+    await expectDatabaseCount(client, 'list_items', itemName, 0)
+
+    await createDialog.getByRole('button', { name: 'Back', exact: true }).click()
+    await expect(categoryDialog).toBeVisible()
+    await expect(categoryDialog).toContainText(itemName)
+    await expect(categoryDialog.getByRole('button', { name: 'Create category' })).toBeFocused()
+    await categoryDialog.getByRole('button', { name: 'Create category' }).click()
+    await expect(categoryNameInput).toHaveValue(categoryName)
+    await createDialog.getByRole('button', { name: 'Cancel adding item' }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(itemInput).toHaveValue(itemName)
+    await expect(quantityInput).toHaveValue('2')
+
+    await page.getByRole('button', { name: 'Add item', exact: true }).click()
+    await categoryDialog.getByRole('button', { name: 'Create category', exact: true }).click()
+    await expect(categoryNameInput).toBeFocused()
+    await categoryNameInput.fill(categoryName)
+    await categoryNameInput.press('Enter')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page).toHaveURL(new RegExp(`\\?list=${list!.id}$`))
+    await expect(page.getByRole('heading', { name: categoryName, exact: true })).toBeVisible()
+    await expectDatabaseCount(client, 'categories', categoryName, 1)
+    await expectDatabaseCount(client, 'list_items', itemName, 1)
+    await expect(page.getByText(itemName, { exact: true })).toBeVisible()
+    await expect(itemInput).toHaveValue('')
+    await expect(quantityInput).toHaveValue('')
+    await expect(itemInput).toBeFocused()
+    await expect.poll(async () => {
+      const { data, error } = await client.from('list_items')
+        .select('quantity, categories!inner(name, keywords)')
+        .eq('list_id', list!.id).eq('name', itemName).single()
+      expect(error).toBeNull()
+      return data
+    }).toEqual({ quantity: '2', categories: { name: categoryName, keywords: [itemName] } })
+
+    // Future occurrences are recognized from the category's new keyword.
+    await itemInput.fill(itemName)
+    await expect(page.getByRole('button', { name: `${categoryName} · Change category` })).toBeVisible()
+    await page.getByRole('button', { name: 'Add item', exact: true }).click()
+    await expect(itemInput).toHaveValue('')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expectDatabaseCount(client, 'list_items', itemName, 2)
+  })
+
+  for (const failingTable of ['categories', 'list_items'] as const) {
+    test(`retries category creation in the drawer after a ${failingTable} save failure without duplicates`, async ({ page }) => {
+      const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      const listTitle = `Playwright category retry ${suffix}`
+      const itemName = `unknown-${suffix}`
+      const categoryName = `Playwright retry category ${suffix}`
+      cleanupListTitles.add(listTitle)
+      cleanupCategoryNames.add(categoryName)
+      const { data: list, error } = await client.from('lists')
+        .insert({ title: listTitle, list_type: 'shopping' }).select('id').single()
+      expect(error).toBeNull()
+
+      await signInViaUi(page)
+      await page.getByText(listTitle, { exact: true }).click()
+      await page.getByRole('combobox', { name: 'Item name' }).fill(itemName)
+      await page.getByPlaceholder('Qty').fill('3')
+      await page.getByRole('button', { name: 'Add item', exact: true }).click()
+      await page.getByRole('dialog').getByRole('button', { name: 'Create category' }).click()
+      const dialog = page.getByRole('dialog', { name: 'Create category', exact: true })
+      const nameInput = dialog.getByLabel('Category name')
+      const save = dialog.getByRole('button', { name: 'Create and add item' })
+      await nameInput.fill(categoryName)
+
+      let failNextSave = true
+      await page.route(`**/rest/v1/${failingTable}*`, async (route) => {
+        if (route.request().method() === 'POST' && failNextSave) {
+          failNextSave = false
+          await route.fulfill({
+            status: 400,
+            contentType: 'application/json',
+            body: JSON.stringify({ code: 'P0001', message: 'Simulated save failure' }),
+          })
+        } else {
+          await route.continue()
+        }
+      })
+      await save.click()
+      await expect(dialog.getByRole('alert')).toBeVisible()
+      await expect(nameInput).toHaveValue(categoryName)
+      await expect(save).toBeEnabled()
+      await expectDatabaseCount(client, 'list_items', itemName, 0)
+      await expectDatabaseCount(client, 'categories', categoryName, failingTable === 'categories' ? 0 : 1)
+
+      await save.click()
+      await expect(dialog).toHaveCount(0)
+      await expectDatabaseCount(client, 'categories', categoryName, 1)
+      await expectDatabaseCount(client, 'list_items', itemName, 1)
+      await expect.poll(async () => {
+        const { data, error: itemError } = await client.from('list_items')
+          .select('quantity, categories!inner(name)')
+          .eq('list_id', list!.id).eq('name', itemName).single()
+        expect(itemError).toBeNull()
+        return data
+      }).toEqual({ quantity: '3', categories: { name: categoryName } })
+    })
+  }
+
+  test('previews and changes the category for the current draft without saving it', async ({ page }) => {
+    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const listTitle = `Playwright category preview ${suffix}`
+    const unknownItem = `unknown-${suffix}`
+    cleanupListTitles.add(listTitle)
+    const { data: list, error: listError } = await client.from('lists')
+      .insert({ title: listTitle, list_type: 'shopping' }).select('id').single()
+    expect(listError).toBeNull()
+    const { data: categories, error: categoriesError } = await client.from('categories')
+      .select('id, name').in('name', ['Alkohol', 'Napoje'])
+    expect(categoriesError).toBeNull()
+    const alcoholId = categories!.find(({ name }) => name === 'Alkohol')!.id
+    const drinksId = categories!.find(({ name }) => name === 'Napoje')!.id
+
+    await signInViaUi(page)
+    await page.getByText(listTitle, { exact: true }).click()
+    const itemInput = page.getByRole('combobox', { name: 'Item name' })
+    const quantityInput = page.getByPlaceholder('Qty')
+    const categoryHint = page.getByRole('button', { name: /Change category$/ })
+    const categoryDialog = page.getByRole('dialog', { name: 'Choose a category' })
+    await expect(page.locator('header').getByRole('button', { name: 'Alkohol', exact: true }))
+      .toHaveCount(0)
+
+    // Typing a known name is enough; choosing an autocomplete suggestion is optional.
+    await itemInput.fill('wino')
+    await expect(categoryHint).toHaveAccessibleName('Alkohol · Change category')
+    await categoryHint.click()
+    await expect(categoryDialog).toBeVisible()
+    await expect(categoryDialog).toContainText('wino')
+    await expect(categoryDialog.getByRole('button', { name: 'Alkohol', exact: true }))
+      .toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('Escape')
+    await expect(categoryDialog).toHaveCount(0)
+    await expect(itemInput).toBeFocused()
+    await expect(categoryHint).toHaveAccessibleName('Alkohol · Change category')
+
+    await categoryHint.click()
+    await categoryDialog.getByRole('button', { name: 'Napoje', exact: true }).click()
+    await expect(categoryHint).toHaveAccessibleName('Napoje · Change category')
+    const { count, error: countError } = await client.from('list_items')
+      .select('id', { count: 'exact', head: true }).eq('list_id', list!.id)
+    expect(countError).toBeNull()
+    expect(count).toBe(0)
+
+    // Editing the name must discard the previous name's category override.
+    await itemInput.fill(unknownItem)
+    await expect(categoryHint).toHaveCount(0)
+    await page.getByRole('button', { name: 'Add item', exact: true }).click()
+    await expect(categoryDialog).toBeVisible()
+    await expect(categoryDialog).toContainText(unknownItem)
+    await categoryDialog.getByRole('button', { name: 'Cancel adding item' }).click()
+
+    for (const [quantity, categoryName] of [['1', 'Napoje'], ['2', null], ['3', 'Alkohol']] as const) {
+      await itemInput.fill('wino')
+      await expect(categoryHint).toHaveAccessibleName('Alkohol · Change category')
+      if (categoryName !== 'Alkohol') {
+        await categoryHint.click()
+        await categoryDialog.getByRole('button', { name: categoryName ?? 'Use Other', exact: true }).click()
+        await expect(categoryDialog).toHaveCount(0)
+        await expect(categoryHint).toHaveAccessibleName(`${categoryName ?? 'Other'} · Change category`)
+      }
+      await quantityInput.fill(quantity)
+      await quantityInput.press('Enter')
+      await expect(itemInput).toHaveValue('')
+      await expect(categoryHint).toHaveCount(0)
+    }
+
+    await expect.poll(async () => {
+      const { data, error } = await client.from('list_items')
+        .select('name, category_id, quantity').eq('list_id', list!.id).order('quantity')
+      expect(error).toBeNull()
+      return data
+    }).toEqual([
+      { name: 'wino', category_id: drinksId, quantity: '1' },
+      { name: 'wino', category_id: null, quantity: '2' },
+      { name: 'wino', category_id: alcoholId, quantity: '3' },
+    ])
   })
 
   test('creates a flat todo list with uncategorized items', async ({ page }) => {
@@ -428,99 +789,140 @@ test.describe('Shared Grocery & Todo UI with Supabase', () => {
     cleanupListTitles.delete(listTitle)
   })
 
-  test('deletes list items and lists with thresholded swipes in both directions', async ({
-    page,
-  }) => {
-    const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    const listTitle = `Playwright swipe list ${suffix}`
-    const rightSwipeItem = `Playwright swipe right ${suffix}`
-    const leftSwipeItem = `Playwright swipe left ${suffix}`
-    const flickSwipeItem = `Playwright swipe flick ${suffix}`
-    const retainedItem = `Playwright retained item ${suffix}`
-    cleanupListTitles.add(listTitle)
+  for (const listType of ['shopping', 'todo'] as const) {
+    test(`completes ${listType} items left, deletes them right, and deletes lists in both directions`, async ({
+      page,
+    }) => {
+      const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      const listTitle = `Playwright swipe list ${suffix}`
+      const rightSwipeItem = `Playwright swipe right ${suffix}`
+      const leftSwipeItem = `Playwright swipe left ${suffix}`
+      const flickSwipeItem = `Playwright swipe flick ${suffix}`
+      const retainedItem = `Playwright retained item ${suffix}`
+      cleanupListTitles.add(listTitle)
 
-    const { data: list, error: listError } = await client
-      .from('lists')
-      .insert({ title: listTitle, list_type: 'todo' })
-      .select('id')
-      .single()
-    expect(listError).toBeNull()
+      const { data: list, error: listError } = await client
+        .from('lists')
+        .insert({ title: listTitle, list_type: listType })
+        .select('id')
+        .single()
+      expect(listError).toBeNull()
 
-    const { error: itemsError } = await client.from('list_items').insert([
-      { list_id: list!.id, name: rightSwipeItem },
-      { list_id: list!.id, name: leftSwipeItem },
-      { list_id: list!.id, name: flickSwipeItem },
-      { list_id: list!.id, name: retainedItem },
-    ])
-    expect(itemsError).toBeNull()
+      const { error: itemsError } = await client.from('list_items').insert([
+        { list_id: list!.id, name: rightSwipeItem },
+        { list_id: list!.id, name: leftSwipeItem },
+        { list_id: list!.id, name: flickSwipeItem },
+        { list_id: list!.id, name: retainedItem },
+      ])
+      expect(itemsError).toBeNull()
 
-    await signInViaUi(page)
-    const listCard = page
-      .locator('[data-swipe-to-delete]')
-      .filter({ hasText: listTitle })
+      await signInViaUi(page)
+      const listCard = page
+        .locator('[data-swipe-actions]')
+        .filter({ hasText: listTitle })
 
-    await dragAcross(page, listCard, 0.25, 0, async () => {
-      await expect(listCard).toHaveAttribute('data-swipe-state', 'swiping')
-      await expect(listCard).toHaveAttribute('data-swipe-direction', 'right')
-      await expect(listCard.locator('[aria-hidden="true"]').first()).toHaveCSS(
-        'opacity',
-        '1',
-      )
-      await page.waitForTimeout(150)
+      await dragAcross(page, listCard, 0.25, 0, async () => {
+        await expect(listCard).toHaveAttribute('data-swipe-state', 'swiping')
+        await expect(listCard).toHaveAttribute('data-swipe-direction', 'right')
+        await expect(listCard.locator('[aria-hidden="true"]').first()).toHaveCSS(
+          'opacity',
+          '1',
+        )
+        await page.waitForTimeout(150)
+      })
+      await expect(listCard).toHaveAttribute('data-swipe-state', 'idle')
+      await expectDatabaseCount(client, 'lists', listTitle, 1)
+
+      await page.waitForTimeout(500)
+      await page.getByText(listTitle, { exact: true }).click()
+      await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
+
+      const rightSwipeRow = page
+        .locator('[data-swipe-actions]')
+        .filter({ hasText: rightSwipeItem })
+      await touchDragAcross(page, rightSwipeRow, 0.42, 0, async () => {
+        await expect(rightSwipeRow).toHaveAttribute('data-swipe-state', 'swiping')
+        await expectSwipeFeedback(rightSwipeRow, 'delete', 'right')
+      })
+      await expect(page.getByText(rightSwipeItem, { exact: true })).toHaveCount(0)
+      await expectDatabaseCount(client, 'list_items', rightSwipeItem, 0)
+
+      const leftSwipeRow = page
+        .locator('[data-swipe-actions]')
+        .filter({ hasText: leftSwipeItem })
+      // A short swipe reveals completion feedback without changing the item.
+      await dragAcross(page, leftSwipeRow, -0.12, 0, async () => {
+        await expectSwipeFeedback(leftSwipeRow, 'complete', 'left')
+      })
+      await expect(leftSwipeRow).toHaveAttribute('data-swipe-state', 'idle')
+      await expect(leftSwipeRow.getByRole('button').first()).toHaveAttribute('aria-pressed', 'false')
+      await expectDatabaseCount(client, 'list_items', leftSwipeItem, 1)
+
+      await touchDragAcross(page, leftSwipeRow, -0.42, 0, async () => {
+        await expectSwipeFeedback(leftSwipeRow, 'complete', 'left')
+      })
+      await expect(leftSwipeRow).toHaveAttribute('data-swipe-state', 'idle')
+      await expect(leftSwipeRow.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true')
+      await expect.poll(async () => {
+        const { data, error } = await client.from('list_items')
+          .select('is_done, done_at').eq('name', leftSwipeItem).single()
+        expect(error).toBeNull()
+        return Boolean(data?.is_done && data.done_at)
+      }).toBe(true)
+
+      // Swiping an already completed item must not toggle it back or remove it.
+      await dragAcross(page, leftSwipeRow, -0.6)
+      await expect(leftSwipeRow).toHaveAttribute('data-swipe-state', 'idle')
+      await expect(leftSwipeRow.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true')
+      const { data: completedItem, error: completedItemError } = await client
+        .from('list_items').select('is_done').eq('name', leftSwipeItem).single()
+      expect(completedItemError).toBeNull()
+      expect(completedItem?.is_done).toBe(true)
+
+      // Completed items remain deletable with a right swipe.
+      await dragAcross(page, leftSwipeRow, 0.6)
+      await expect(leftSwipeRow).toHaveCount(0)
+      await expectDatabaseCount(client, 'list_items', leftSwipeItem, 0)
+
+      const flickSwipeRow = page
+        .locator('[data-swipe-actions]')
+        .filter({ hasText: flickSwipeItem })
+      await flickAcross(page, flickSwipeRow, -0.24)
+      await expect(flickSwipeRow).toHaveAttribute('data-swipe-state', 'idle')
+      await expect(flickSwipeRow.getByRole('button').first()).toHaveAttribute('aria-pressed', 'true')
+      await expect.poll(async () => {
+        const { data, error } = await client.from('list_items')
+          .select('is_done').eq('name', flickSwipeItem).single()
+        expect(error).toBeNull()
+        return data?.is_done
+      }).toBe(true)
+
+      const retainedRow = page
+        .locator('[data-swipe-actions]')
+        .filter({ hasText: retainedItem })
+      await dragAcross(page, retainedRow, 0.05, 0.6)
+      await expect(page.getByText(retainedItem, { exact: true })).toBeVisible()
+      await expect(retainedRow.getByRole('button').first()).toHaveAttribute('aria-pressed', 'false')
+
+      await page.getByRole('button', { name: 'Back to lists' }).click()
+      const cardAfterReturn = page
+        .locator('[data-swipe-actions]')
+        .filter({ hasText: listTitle })
+
+      page.once('dialog', (dialog) => void dialog.dismiss())
+      await dragAcross(page, cardAfterReturn, -0.6, 0, async () => {
+        await expectSwipeFeedback(cardAfterReturn, 'delete', 'left')
+      })
+      await expect(cardAfterReturn).toHaveAttribute('data-swipe-state', 'idle')
+      await expectDatabaseCount(client, 'lists', listTitle, 1)
+
+      page.once('dialog', (dialog) => void dialog.accept())
+      await dragAcross(page, cardAfterReturn, listType === 'shopping' ? -0.6 : 0.6)
+      await expect(cardAfterReturn).toHaveCount(0)
+      await expectDatabaseCount(client, 'lists', listTitle, 0)
+      cleanupListTitles.delete(listTitle)
     })
-    await expect(listCard).toHaveAttribute('data-swipe-state', 'idle')
-    await expectDatabaseCount(client, 'lists', listTitle, 1)
-
-    await page.waitForTimeout(500)
-    await page.getByText(listTitle, { exact: true }).click()
-    await expect(page.getByRole('heading', { name: listTitle })).toBeVisible()
-
-    const rightSwipeRow = page
-      .locator('[data-swipe-to-delete]')
-      .filter({ hasText: rightSwipeItem })
-    await touchDragAcross(page, rightSwipeRow, 0.42, 0, async () => {
-      await expect(rightSwipeRow).toHaveAttribute('data-swipe-state', 'swiping')
-      await expect(rightSwipeRow).toHaveAttribute('data-swipe-direction', 'right')
-    })
-    await expect(page.getByText(rightSwipeItem, { exact: true })).toHaveCount(0)
-    await expectDatabaseCount(client, 'list_items', rightSwipeItem, 0)
-
-    const leftSwipeRow = page
-      .locator('[data-swipe-to-delete]')
-      .filter({ hasText: leftSwipeItem })
-    await dragAcross(page, leftSwipeRow, -0.6)
-    await expect(page.getByText(leftSwipeItem, { exact: true })).toHaveCount(0)
-    await expectDatabaseCount(client, 'list_items', leftSwipeItem, 0)
-
-    const flickSwipeRow = page
-      .locator('[data-swipe-to-delete]')
-      .filter({ hasText: flickSwipeItem })
-    await dragAcross(page, flickSwipeRow, -0.24, 0, undefined, 1)
-    await expect(page.getByText(flickSwipeItem, { exact: true })).toHaveCount(0)
-    await expectDatabaseCount(client, 'list_items', flickSwipeItem, 0)
-
-    const retainedRow = page
-      .locator('[data-swipe-to-delete]')
-      .filter({ hasText: retainedItem })
-    await dragAcross(page, retainedRow, 0.05, 0.6)
-    await expect(page.getByText(retainedItem, { exact: true })).toBeVisible()
-
-    await page.getByRole('button', { name: 'Back to lists' }).click()
-    const cardAfterReturn = page
-      .locator('[data-swipe-to-delete]')
-      .filter({ hasText: listTitle })
-
-    page.once('dialog', (dialog) => void dialog.dismiss())
-    await dragAcross(page, cardAfterReturn, -0.6)
-    await expect(cardAfterReturn).toHaveAttribute('data-swipe-state', 'idle')
-    await expectDatabaseCount(client, 'lists', listTitle, 1)
-
-    page.once('dialog', (dialog) => void dialog.accept())
-    await dragAcross(page, cardAfterReturn, 0.6)
-    await expect(cardAfterReturn).toHaveCount(0)
-    await expectDatabaseCount(client, 'lists', listTitle, 0)
-    cleanupListTitles.delete(listTitle)
-  })
+  }
 
   test('queues an offline mutation and synchronizes it after reconnecting', async ({
     context,

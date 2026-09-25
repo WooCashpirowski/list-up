@@ -82,7 +82,7 @@ export function useCategories(userId: string) {
   }, [categories, hasHydratedCache, userId])
 
   const createCategory = useCallback(
-    async (name: string): Promise<string | null> => {
+    async (name: string, keywords: string[] = []): Promise<string | null> => {
       const trimmedName = name.trim()
       if (!trimmedName) return null
 
@@ -92,7 +92,7 @@ export function useCategories(userId: string) {
         id,
         name: trimmedName,
         order_index: categories.length,
-        keywords: [],
+        keywords,
         created_by: userId,
         created_at: now,
         updated_at: now,
@@ -105,7 +105,7 @@ export function useCategories(userId: string) {
           id,
           name: trimmedName,
           order_index: categories.length,
-          keywords: [],
+          keywords,
         }
         const result = await executeOrQueueMutation(
           {
