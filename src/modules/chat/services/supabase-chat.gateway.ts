@@ -15,11 +15,15 @@ import {
   createMessage,
   getInbox,
   getLatestMessages,
+  getReactions,
   getMessagesBefore,
   getPeerReceipt,
   getUnreadCount,
   markDeliveredThrough,
   markReadThrough,
+  setReaction,
+  setPeerAlias,
+  downloadPhoto,
 } from './chat.service'
 
 type ChatMessageRecord = Database['public']['Tables']['chat_messages']['Row']
@@ -36,6 +40,10 @@ export function createSupabaseChatGateway(
     getMessagesBefore: (conversationId, sequence, limit) =>
       getMessagesBefore(conversationId, sequence, limit, supabase),
     createMessage: (input) => createMessage(input, supabase),
+    getReactions: (conversationId) => getReactions(conversationId, supabase),
+    setReaction: (messageId, emoji) => setReaction(messageId, emoji, supabase),
+    setPeerAlias: (peerId, alias) => setPeerAlias(peerId, alias, supabase),
+    downloadPhoto: (path) => downloadPhoto(path, supabase),
     getUnreadCount: () => getUnreadCount(supabase),
     getPeerReceipt: (conversationId) =>
       getPeerReceipt(conversationId, supabase),
@@ -63,6 +71,14 @@ export function createSupabaseChatGateway(
               handlers.onMessage(toChatMessage(payload.new))
             }
           },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*', schema: 'public', table: 'chat_message_reactions',
+            filter: `conversation_id=eq.${conversationId}`,
+          },
+          handlers.onReactionsChanged,
         )
         .on(
           'postgres_changes',
@@ -144,6 +160,10 @@ export function createSupabaseChatGateway(
           { event: 'INSERT', schema: 'public', table: 'chat_conversations' },
           handlers.onChanged,
         )
+        .on('postgres_changes', {
+          event: '*', schema: 'public', table: 'chat_peer_aliases',
+          filter: `owner_id=eq.${userId}`,
+        }, handlers.onChanged)
         .on(
           'postgres_changes',
           {

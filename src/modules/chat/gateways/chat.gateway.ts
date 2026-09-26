@@ -1,5 +1,6 @@
 import type {
   ChatConversationSummary,
+  ChatReaction,
   ChatReadState,
   ChatReceiptEvent,
   ChatReceiptState,
@@ -14,6 +15,7 @@ export type ChatSubscriptionHandlers = {
   onReadState: (state: ChatReadState) => void
   onReceipt: (receipt: ChatReceiptEvent) => void
   onTyping: (event: ChatTypingEvent) => void
+  onReactionsChanged: () => void
 }
 
 export type ChatLiveSession = {
@@ -40,6 +42,10 @@ export interface ChatGateway {
   createMessage: (
     input: CreateChatMessageInput,
   ) => Promise<PersistedChatMessage>
+  getReactions: (conversationId: string) => Promise<ChatReaction[]>
+  setReaction: (messageId: string, emoji: string | null) => Promise<void>
+  setPeerAlias: (peerId: string, alias: string | null) => Promise<void>
+  downloadPhoto: (path: string) => Promise<Blob>
   getUnreadCount: () => Promise<number>
   getPeerReceipt: (conversationId: string) => Promise<ChatReceiptState>
   markDeliveredThrough: (sequence: number) => Promise<number>

@@ -11,6 +11,8 @@ export const snapshotTables = [
     'public.list_items',
     'public.chat_conversations',
     'public.chat_messages',
+    'public.chat_message_reactions',
+    'public.chat_peer_aliases',
     'public.chat_read_state',
 ];
 
