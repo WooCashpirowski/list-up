@@ -253,7 +253,11 @@ export function useChat(
     })
 
     const liveSession = gateway.subscribe(userId, conversationId, {
-      onConnected: () => void refreshPeerReceipt(),
+      onConnected: () => {
+        void refreshLatest()
+        void refreshPeerReceipt()
+        void refreshReactions()
+      },
       onMessage: (message) => {
         setMessages((current) => mergeChatMessages(current, [message]))
         if (message.sender_id !== userId) {
