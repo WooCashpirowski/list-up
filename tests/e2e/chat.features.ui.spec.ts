@@ -51,6 +51,9 @@ test('sends a queued photo and GIF, links URLs, reacts, and keeps a personal nam
   expect(conversationId).toBeTruthy()
   const { data: previousReadStates } = await admin.from('chat_read_state').select('*')
     .eq('conversation_id', conversationId!)
+  const { data: previousAlias } = await admin.from('chat_peer_aliases')
+    .select('alias').eq('owner_id', firstId!).eq('peer_id', secondId!)
+    .maybeSingle()
 
   const gif = {
     id: 'chatFeatureGif', title: 'Happy cat',
@@ -148,7 +151,10 @@ test('sends a queued photo and GIF, links URLs, reacts, and keeps a personal nam
     await first.getByRole('button', { name: 'Retry' }).last().click()
     await expect(second.getByRole('img', { name: 'Photo' })).toHaveCount(2, { timeout: 20_000 })
   } finally {
-    await admin.from('chat_peer_aliases').delete().eq('owner_id', firstId!).eq('peer_id', secondId!)
+    if (previousAlias) await admin.from('chat_peer_aliases').upsert({
+      owner_id: firstId!, peer_id: secondId!, alias: previousAlias.alias,
+    })
+    else await admin.from('chat_peer_aliases').delete().eq('owner_id', firstId!).eq('peer_id', secondId!)
     const { data: created } = await admin.from('chat_messages').select('id,media_path')
       .eq('conversation_id', conversationId!).gte('created_at', startedAt)
     const ids = created?.map((message) => message.id) ?? []

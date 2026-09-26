@@ -40,6 +40,9 @@ test('isolates chat media, reactions, and personal aliases', async () => {
   const messageId = crypto.randomUUID()
   const gifMessageId = crypto.randomUUID()
   const path = `${conversationId}/${firstUser.id}/${messageId}.jpg`
+  const { data: previousAlias } = await admin.from('chat_peer_aliases')
+    .select('alias').eq('owner_id', firstUser.id).eq('peer_id', secondUser.id)
+    .maybeSingle()
 
   try {
     const { error: uploadError } = await first.storage.from('chat-photos')
@@ -114,10 +117,87 @@ test('isolates chat media, reactions, and personal aliases', async () => {
       .toEqual([])
   } finally {
     await first.rpc('set_chat_peer_alias', {
-      target_peer_id: secondUser.id, selected_alias: null,
+      target_peer_id: secondUser.id, selected_alias: previousAlias?.alias ?? null,
     })
+    await admin.from('notification_events').delete().in('source_id', [messageId, gifMessageId])
     await admin.from('chat_messages').delete().in('id', [messageId, gifMessageId])
     await admin.storage.from('chat-photos').remove([path])
     await Promise.all(clients.map((client) => client.auth.signOut()))
+  }
+})
+
+test('uses the recipient’s private name and media previews in push deliveries', async () => {
+  test.skip(process.env.E2E_ENVIRONMENT === 'staging',
+    'Claims delivery rows only in the local Docker database')
+  test.skip(!url || !anonKey || !serviceKey || accounts.slice(0, 2).some(([email, password]) => !email || !password),
+    'Requires two local users and service role')
+
+  const first = createClient<Database>(url!, anonKey!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const second = createClient<Database>(url!, anonKey!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const admin = createClient<Database>(url!, serviceKey!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const firstAuth = await first.auth.signInWithPassword({
+    email: accounts[0][0]!, password: accounts[0][1]!,
+  })
+  const secondAuth = await second.auth.signInWithPassword({
+    email: accounts[1][0]!, password: accounts[1][1]!,
+  })
+  expect(firstAuth.error).toBeNull()
+  expect(secondAuth.error).toBeNull()
+  const firstId = firstAuth.data.user!.id
+  const secondId = secondAuth.data.user!.id
+  const { data: conversations } = await admin.from('chat_conversations').select('*')
+  const conversationId = conversations?.find((conversation) =>
+    [conversation.first_user_id, conversation.second_user_id].sort().join(':') ===
+    [firstId, secondId].sort().join(':'),
+  )?.id
+  expect(conversationId).toBeTruthy()
+  const endpoint = `https://push.invalid/${crypto.randomUUID()}`
+  const photoId = crypto.randomUUID()
+  const gifId = crypto.randomUUID()
+  const { data: previousAlias } = await admin.from('chat_peer_aliases')
+    .select('alias').eq('owner_id', secondId).eq('peer_id', firstId)
+    .maybeSingle()
+
+  try {
+    expect((await second.from('push_subscriptions').insert({
+      endpoint, p256dh: 'test-p256dh', auth: 'test-auth',
+    })).error).toBeNull()
+    expect((await second.rpc('set_chat_peer_alias', {
+      target_peer_id: firstId, selected_alias: 'My private contact',
+    })).error).toBeNull()
+    expect((await first.from('chat_messages').insert({
+      id: photoId, conversation_id: conversationId!, body: '', kind: 'photo',
+      media_path: `${conversationId}/${firstId}/${photoId}.jpg`,
+    })).error).toBeNull()
+    expect((await first.from('chat_messages').insert({
+      id: gifId, conversation_id: conversationId!, body: '', kind: 'gif',
+      gif_id: 'chatFeatureGif',
+    })).error).toBeNull()
+
+    const { data: claimed, error } = await admin.rpc('claim_notification_deliveries',
+      { batch_size: 50 })
+    expect(error).toBeNull()
+    const previews = claimed?.filter((delivery) =>
+      delivery.endpoint === endpoint && [photoId, gifId].includes(delivery.source_id))
+    expect(previews?.map(({ sender_name, message_body }) => ({ sender_name, message_body })))
+      .toEqual([
+        { sender_name: 'My private contact', message_body: '📷 Photo' },
+        { sender_name: 'My private contact', message_body: 'GIF' },
+      ])
+  } finally {
+    await admin.from('notification_events').delete().in('source_id', [photoId, gifId])
+    await admin.from('chat_messages').delete().in('id', [photoId, gifId])
+    await admin.from('push_subscriptions').delete().eq('endpoint', endpoint)
+    await second.rpc('set_chat_peer_alias', {
+      target_peer_id: firstId, selected_alias: previousAlias?.alias ?? null,
+    })
+    await first.auth.signOut()
+    await second.auth.signOut()
   }
 })
