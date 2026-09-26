@@ -174,7 +174,9 @@ export function createSupabaseChatGateway(
           },
           handlers.onChanged,
         )
-        .subscribe()
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') handlers.onChanged()
+        })
 
       return () => {
         void supabase.removeChannel(channel)
