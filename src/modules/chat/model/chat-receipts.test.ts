@@ -15,6 +15,9 @@ function ownMessage(sequence: number): ChatMessage {
     conversation_id: 'conversation',
     sender_id: 'me',
     body: 'message',
+    kind: 'text',
+    media_path: null,
+    gif_id: null,
     created_at: '2026-08-19T10:00:00.000Z',
     delivery_status: 'sent',
   }
