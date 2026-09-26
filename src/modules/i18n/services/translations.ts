@@ -13,6 +13,8 @@ const en = {
     'auth.emailPlaceholder': 'you@example.com',
     'auth.password': 'Password',
     'auth.passwordPlaceholder': 'Your password',
+    'auth.showPassword': 'Show password',
+    'auth.hidePassword': 'Hide password',
     'auth.submit': 'Sign in',
     'auth.submitting': 'Signing in…',
     'auth.restricted': 'Access is restricted to administrator-provisioned accounts.',
@@ -176,6 +178,8 @@ const pl: Record<TranslationKey, string> = {
     'auth.emailPlaceholder': 'ty@example.com',
     'auth.password': 'Hasło',
     'auth.passwordPlaceholder': 'Twoje hasło',
+    'auth.showPassword': 'Pokaż hasło',
+    'auth.hidePassword': 'Ukryj hasło',
     'auth.submit': 'Zaloguj się',
     'auth.submitting': 'Logowanie…',
     'auth.restricted':

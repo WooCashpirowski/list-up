@@ -1,224 +1,295 @@
-'use client'
+'use client';
 
-import { Pencil, Plus, Search, Tags, Trash2, X } from 'lucide-react'
-import { useState } from 'react'
+import { Pencil, Plus, Search, Tags, Trash2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 
-import { ThemeToggle } from '@/components/theme-toggle'
-import { cn } from '@/lib/utils'
-import { LanguageToggle, useI18n } from '@/src/modules/i18n'
+import { ThemeToggle } from '@/components/theme-toggle';
+import { cn } from '@/lib/utils';
+import { LanguageToggle, useI18n } from '@/src/modules/i18n';
 
-import { useCategorySearch } from '../hooks/use-category-search'
+import { useCategorySearch } from '../hooks/use-category-search';
 import {
-  getCategoryEmoji,
-  getCategoryTone,
-} from '../model/category-appearance'
-import type { CategoryItemReference } from '../model/category-catalog'
-import type { Category } from '../types/category.types'
-import { CategoryEditModal } from './category-edit-modal'
+    getCategoryEmoji,
+    getCategoryTone,
+} from '../model/category-appearance';
+import type { CategoryItemReference } from '../model/category-catalog';
+import type { Category } from '../types/category.types';
+import { CategoryEditModal } from './category-edit-modal';
 
 type CategoriesViewProps = {
-  categories: Category[]
-  items: CategoryItemReference[]
-  onCreateCategory: (name: string) => Promise<string | null>
-  onSaveCategory: (
-    id: string,
-    name: string,
-    keywords: string[],
-  ) => Promise<boolean>
-  onDeleteCategory: (id: string) => Promise<void>
-}
+    categories: Category[];
+    items: CategoryItemReference[];
+    onCreateCategory: (name: string) => Promise<string | null>;
+    onSaveCategory: (
+        id: string,
+        name: string,
+        keywords: string[],
+    ) => Promise<boolean>;
+    onDeleteCategory: (id: string) => Promise<void>;
+    onRemoveCategoryItem: (
+        categoryId: string,
+        name: string,
+    ) => Promise<boolean>;
+};
 
 const categoryToneClassNames = {
-  produce: 'bg-shopping-soft text-shopping',
-  pantry: 'bg-warning-soft text-warning',
-  chilled: 'bg-info-soft text-info',
-  protein: 'bg-destructive-soft text-destructive',
-  home: 'bg-todo-soft text-todo',
-  neutral: 'bg-accent text-accent-foreground',
-} as const
+    produce: 'bg-shopping-soft text-shopping',
+    pantry: 'bg-warning-soft text-warning',
+    chilled: 'bg-info-soft text-info',
+    protein: 'bg-destructive-soft text-destructive',
+    home: 'bg-todo-soft text-todo',
+    neutral: 'bg-accent text-accent-foreground',
+} as const;
 
 export function CategoriesView({
-  categories,
-  items,
-  onCreateCategory,
-  onSaveCategory,
-  onDeleteCategory,
+    categories,
+    items,
+    onCreateCategory,
+    onSaveCategory,
+    onDeleteCategory,
+    onRemoveCategoryItem,
 }: CategoriesViewProps) {
-  const { t } = useI18n()
-  const { entries, query, setQuery } = useCategorySearch(categories, items)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
-  const [newName, setNewName] = useState('')
+    const { t } = useI18n();
+    const { entries, query, setQuery } = useCategorySearch(categories, items);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [adding, setAdding] = useState(false);
+    const [newName, setNewName] = useState('');
+    const pendingRemovals = useRef(new Set<string>());
+    const [removingCategoryIds, setRemovingCategoryIds] = useState(
+        new Set<string>(),
+    );
 
-  async function submitCreate() {
-    const id = await onCreateCategory(newName)
-    if (!id) return
-    setNewName('')
-    setAdding(false)
-  }
+    async function removeItem(categoryId: string, name: string) {
+        if (pendingRemovals.current.has(categoryId)) return;
+        pendingRemovals.current.add(categoryId);
+        setRemovingCategoryIds(new Set(pendingRemovals.current));
+        try {
+            await onRemoveCategoryItem(categoryId, name);
+        } finally {
+            pendingRemovals.current.delete(categoryId);
+            setRemovingCategoryIds(new Set(pendingRemovals.current));
+        }
+    }
 
-  const editingCategory =
-    categories.find((category) => category.id === editingId) ?? null
+    async function submitCreate() {
+        const id = await onCreateCategory(newName);
+        if (!id) return;
+        setNewName('');
+        setAdding(false);
+    }
 
-  return (
-    <div className="mx-auto flex w-full max-w-md flex-col px-5 pb-28 pt-14">
-      <header className="mb-5 flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-            {t('categories.title')}
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t('categories.description')}
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          <LanguageToggle />
-          <ThemeToggle />
-        </div>
-      </header>
+    const editingCategory =
+        categories.find((category) => category.id === editingId) ?? null;
 
-      <div className="surface-card mb-5 flex items-center gap-2 rounded-2xl border border-input bg-card/90 px-4 py-3 backdrop-blur-sm focus-within:border-primary/45">
-        <Search className="size-4 shrink-0 text-muted-foreground" />
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('categories.search')}
-          className="min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground"
-        />
-        {query && (
-          <button onClick={() => setQuery('')} aria-label={t('categories.clearSearch')}>
-            <X className="size-4 text-muted-foreground" />
-          </button>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-3">
-        {adding && (
-          <div className="surface-card rounded-3xl border border-primary/25 bg-card/95 p-4">
-            <label htmlFor="new-category" className="mb-2 block text-sm font-semibold">
-              {t('categories.name')}
-            </label>
-            <input
-              id="new-category"
-              autoFocus
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void submitCreate()
-                if (event.key === 'Escape') setAdding(false)
-              }}
-              placeholder={t('categories.name')}
-              className="w-full rounded-2xl border border-input bg-secondary px-4 py-3 text-base outline-none focus:border-primary"
-            />
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={() => {
-                  setAdding(false)
-                  setNewName('')
-                }}
-                className="flex-1 rounded-2xl border border-border py-2.5 text-sm font-semibold"
-              >
-                {t('common.cancel')}
-              </button>
-              <button
-                onClick={() => void submitCreate()}
-                className="primary-action flex-1 rounded-2xl py-2.5 text-sm font-semibold text-primary-foreground"
-              >
-                {t('common.add')}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {entries.map(({ category, itemNames }) => {
-          return (
-            <article
-              key={category.id}
-              className="surface-card rounded-3xl border border-border bg-card/95 p-4 transition-colors hover:border-primary/20"
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={cn(
-                    'flex size-10 shrink-0 items-center justify-center rounded-2xl text-lg',
-                    categoryToneClassNames[getCategoryTone(category.name)],
-                  )}
-                >
-                  {getCategoryEmoji(category.name)}
-                </span>
-                <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
-                  {category.name}
-                </h2>
-
-                <>
-                  <button
-                    onClick={() => setEditingId(category.id)}
-                    aria-label={t('categories.edit', { name: category.name })}
-                    className="flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-primary"
-                  >
-                    <Pencil className="size-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          t('categories.deleteConfirm', { name: category.name }),
-                        )
-                      ) {
-                        void onDeleteCategory(category.id)
-                      }
-                    }}
-                    aria-label={t('categories.delete', { name: category.name })}
-                    className="flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-destructive"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </>
-              </div>
-
-              {itemNames.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {itemNames.map((name) => (
-                    <span
-                      key={name}
-                      className="rounded-full border border-border/70 bg-secondary/80 px-3 py-1 text-xs font-medium text-secondary-foreground"
-                    >
-                      {name}
-                    </span>
-                  ))}
+    return (
+        <div className='mx-auto flex w-full max-w-md flex-col px-5 pb-28 pt-14'>
+            <header className='mb-5 flex items-start justify-between gap-4'>
+                <div className='min-w-0'>
+                    <h1 className='text-3xl font-semibold tracking-tight text-foreground'>
+                        {t('categories.title')}
+                    </h1>
+                    <p className='mt-1 text-sm text-muted-foreground'>
+                        {t('categories.description')}
+                    </p>
                 </div>
-              ) : (
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {t('categories.noItems')}
-                </p>
-              )}
-            </article>
-          )
-        })}
+                <div className='flex shrink-0 gap-2'>
+                    <LanguageToggle />
+                    <ThemeToggle />
+                </div>
+            </header>
 
-        {entries.length === 0 && !adding && (
-          <div className="py-10 text-center text-sm text-muted-foreground">
-            <Tags className="mx-auto mb-3 size-7" />
-            {t('categories.noMatches', { query })}
-          </div>
-        )}
-      </div>
+            <div className='surface-card mb-5 flex items-center gap-2 rounded-2xl border border-input bg-card/90 px-4 py-3 backdrop-blur-sm focus-within:border-primary/45'>
+                <Search className='size-4 shrink-0 text-muted-foreground' />
+                <input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t('categories.search')}
+                    className='min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground'
+                />
+                {query && (
+                    <button
+                        onClick={() => setQuery('')}
+                        aria-label={t('categories.clearSearch')}
+                    >
+                        <X className='size-4 text-muted-foreground' />
+                    </button>
+                )}
+            </div>
 
-      <button
-        onClick={() => setAdding(true)}
-        aria-label={t('categories.add')}
-        className="primary-action fixed bottom-24 right-5 z-30 flex size-14 items-center justify-center rounded-full text-primary-foreground transition-transform active:scale-90"
-      >
-        <Plus className="size-6" strokeWidth={2.5} />
-      </button>
+            <div className='flex flex-col gap-3'>
+                {adding && (
+                    <div className='surface-card rounded-3xl border border-primary/25 bg-card/95 p-4'>
+                        <label
+                            htmlFor='new-category'
+                            className='mb-2 block text-sm font-semibold'
+                        >
+                            {t('categories.name')}
+                        </label>
+                        <input
+                            id='new-category'
+                            autoFocus
+                            value={newName}
+                            onChange={(event) => setNewName(event.target.value)}
+                            onKeyDown={(event) => {
+                                if (event.key === 'Enter') void submitCreate();
+                                if (event.key === 'Escape') setAdding(false);
+                            }}
+                            placeholder={t('categories.name')}
+                            className='w-full rounded-2xl border border-input bg-secondary px-4 py-3 text-base outline-none focus:border-primary'
+                        />
+                        <div className='mt-3 flex gap-2'>
+                            <button
+                                onClick={() => {
+                                    setAdding(false);
+                                    setNewName('');
+                                }}
+                                className='flex-1 rounded-2xl border border-border py-2.5 text-sm font-semibold'
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={() => void submitCreate()}
+                                className='primary-action flex-1 rounded-2xl py-2.5 text-sm font-semibold text-primary-foreground'
+                            >
+                                {t('common.add')}
+                            </button>
+                        </div>
+                    </div>
+                )}
 
-      {editingCategory && (
-        <CategoryEditModal
-          key={editingCategory.id}
-          category={editingCategory}
-          onClose={() => setEditingId(null)}
-          onSave={onSaveCategory}
-        />
-      )}
-    </div>
-  )
+                {entries.map(({ category, itemNames }) => {
+                    return (
+                        <article
+                            key={category.id}
+                            className='surface-card rounded-3xl border border-border bg-card/95 p-4 transition-colors hover:border-primary/20'
+                        >
+                            <div className='flex items-center gap-3'>
+                                <span
+                                    className={cn(
+                                        'flex size-10 shrink-0 items-center justify-center rounded-2xl text-lg',
+                                        categoryToneClassNames[
+                                            getCategoryTone(category.name)
+                                        ],
+                                    )}
+                                >
+                                    {getCategoryEmoji(category.name)}
+                                </span>
+                                <h2 className='min-w-0 flex-1 truncate text-base font-semibold'>
+                                    {category.name}
+                                </h2>
+
+                                <>
+                                    <button
+                                        onClick={() =>
+                                            setEditingId(category.id)
+                                        }
+                                        disabled={removingCategoryIds.has(
+                                            category.id,
+                                        )}
+                                        aria-label={t('categories.edit', {
+                                            name: category.name,
+                                        })}
+                                        className='flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-primary disabled:opacity-50'
+                                    >
+                                        <Pencil className='size-4' />
+                                    </button>
+                                    <button
+                                        disabled={removingCategoryIds.has(
+                                            category.id,
+                                        )}
+                                        onClick={() => {
+                                            if (
+                                                window.confirm(
+                                                    t(
+                                                        'categories.deleteConfirm',
+                                                        { name: category.name },
+                                                    ),
+                                                )
+                                            ) {
+                                                void onDeleteCategory(
+                                                    category.id,
+                                                );
+                                            }
+                                        }}
+                                        aria-label={t('categories.delete', {
+                                            name: category.name,
+                                        })}
+                                        className='flex size-9 items-center justify-center rounded-full text-muted-foreground active:text-destructive disabled:opacity-50'
+                                    >
+                                        <Trash2 className='size-4' />
+                                    </button>
+                                </>
+                            </div>
+
+                            {itemNames.length > 0 ? (
+                                <div className='mt-3 flex flex-wrap gap-1.5'>
+                                    {itemNames.map((name) => (
+                                        <span
+                                            key={name}
+                                            className='inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-secondary/80 py-1 pl-3 pr-1 text-xs font-medium text-secondary-foreground'
+                                        >
+                                            <span className='min-w-0 break-words'>
+                                                {name}
+                                            </span>
+                                            <button
+                                                type='button'
+                                                onClick={() =>
+                                                    void removeItem(
+                                                        category.id,
+                                                        name,
+                                                    )
+                                                }
+                                                disabled={removingCategoryIds.has(
+                                                    category.id,
+                                                )}
+                                                aria-label={t(
+                                                    'categories.removeItem',
+                                                    { name },
+                                                )}
+                                                className='flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50'
+                                            >
+                                                <X
+                                                    className='size-3'
+                                                    strokeWidth={2.5}
+                                                    aria-hidden='true'
+                                                />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className='mt-3 text-sm text-muted-foreground'>
+                                    {t('categories.noItems')}
+                                </p>
+                            )}
+                        </article>
+                    );
+                })}
+
+                {entries.length === 0 && !adding && (
+                    <div className='py-10 text-center text-sm text-muted-foreground'>
+                        <Tags className='mx-auto mb-3 size-7' />
+                        {t('categories.noMatches', { query })}
+                    </div>
+                )}
+            </div>
+
+            <button
+                onClick={() => setAdding(true)}
+                aria-label={t('categories.add')}
+                className='primary-action fixed bottom-24 right-5 z-30 flex size-14 items-center justify-center rounded-full text-primary-foreground transition-transform active:scale-90'
+            >
+                <Plus className='size-6' strokeWidth={2.5} />
+            </button>
+
+            {editingCategory && (
+                <CategoryEditModal
+                    key={editingCategory.id}
+                    category={editingCategory}
+                    onClose={() => setEditingId(null)}
+                    onSave={onSaveCategory}
+                />
+            )}
+        </div>
+    );
 }
