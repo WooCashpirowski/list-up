@@ -4,10 +4,11 @@ export type CachedCollectionName =
   | 'list-items'
   | 'chat-messages'
   | `chat-messages:${string}`
+  | `chat-reactions:${string}`
   | 'chat-inbox'
   | 'profiles'
 
-export type OutboxTable = 'lists' | 'categories' | 'list_items' | 'chat_messages'
+export type OutboxTable = 'lists' | 'categories' | 'list_items' | 'chat_messages' | 'chat_reactions'
 
 export type OutboxOperation = 'upsert' | 'update' | 'delete'
 

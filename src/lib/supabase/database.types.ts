@@ -210,6 +210,9 @@ export type Database = {
           conversation_id: string
           sender_id: string
           body: string
+          kind: 'text' | 'photo' | 'gif'
+          media_path: string | null
+          gif_id: string | null
           created_at: string
         }
         Insert: {
@@ -218,6 +221,9 @@ export type Database = {
           conversation_id: string
           sender_id?: string
           body: string
+          kind?: 'text' | 'photo' | 'gif'
+          media_path?: string | null
+          gif_id?: string | null
           created_at?: string
         }
         Update: {
@@ -226,6 +232,9 @@ export type Database = {
           conversation_id?: string
           sender_id?: string
           body?: string
+          kind?: 'text' | 'photo' | 'gif'
+          media_path?: string | null
+          gif_id?: string | null
           created_at?: string
         }
         Relationships: [
@@ -244,6 +253,36 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      chat_message_reactions: {
+        Row: {
+          message_id: string
+          conversation_id: string
+          user_id: string
+          emoji: string
+          created_at: string
+        }
+        Insert: {
+          message_id: string
+          conversation_id: string
+          user_id?: string
+          emoji: string
+          created_at?: string
+        }
+        Update: {
+          message_id?: string
+          conversation_id?: string
+          user_id?: string
+          emoji?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      chat_peer_aliases: {
+        Row: { owner_id: string; peer_id: string; alias: string }
+        Insert: { owner_id?: string; peer_id: string; alias: string }
+        Update: { owner_id?: string; peer_id?: string; alias?: string }
+        Relationships: []
       }
       chat_read_state: {
         Row: {
@@ -427,6 +466,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: number
       }
+      set_chat_reaction: {
+        Args: { target_message_id: string; selected_emoji: string | null }
+        Returns: undefined
+      }
+      set_chat_peer_alias: {
+        Args: { target_peer_id: string; selected_alias: string | null }
+        Returns: undefined
+      }
       get_chat_inbox: {
         Args: Record<PropertyKey, never>
         Returns: Array<{
@@ -434,9 +481,11 @@ export type Database = {
           peer_id: string
           peer_email: string
           peer_display_name: string
+          peer_alias: string | null
           last_message_id: string | null
           last_message_sender_id: string | null
           last_message_body: string | null
+          last_message_kind: 'text' | 'photo' | 'gif' | null
           last_message_sequence: number | null
           last_message_created_at: string | null
           last_incoming_sequence: number | null

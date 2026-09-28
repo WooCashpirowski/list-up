@@ -6,12 +6,25 @@ export type ChatMessageDeliveryStatus =
   | 'read'
   | 'failed'
 
+export type ChatMessageKind = 'text' | 'photo' | 'gif'
+
+export type ChatReaction = {
+  message_id: string
+  conversation_id: string
+  user_id: string
+  emoji: string
+  created_at: string
+}
+
 export type ChatMessage = {
   id: string
   sequence: number | null
   conversation_id: string
   sender_id: string
   body: string
+  kind: ChatMessageKind
+  media_path: string | null
+  gif_id: string | null
   created_at: string
   delivery_status: ChatMessageDeliveryStatus
 }
@@ -28,6 +41,9 @@ export type CreateChatMessageInput = {
   id: string
   conversation_id: string
   body: string
+  kind?: ChatMessageKind
+  media_path?: string | null
+  gif_id?: string | null
 }
 
 export type ChatReadState = {
@@ -60,9 +76,11 @@ export type ChatConversationSummary = {
   peer_id: string
   peer_email: string
   peer_display_name: string
+  peer_alias: string | null
   last_message_id: string | null
   last_message_sender_id: string | null
   last_message_body: string | null
+  last_message_kind: ChatMessageKind | null
   last_message_sequence: number | null
   last_message_created_at: string | null
   last_incoming_sequence: number | null

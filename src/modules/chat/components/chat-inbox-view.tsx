@@ -95,16 +95,18 @@ export function ChatInboxView({
         ) : (
           <div className="space-y-2">
             {conversations.map((conversation) => {
-              const peerName = getProfileDisplayName({
+              const peerName = conversation.peer_alias ?? getProfileDisplayName({
                 email: conversation.peer_email,
                 display_name: conversation.peer_display_name,
               })
-              const preview = conversation.last_message_body
-                ? `${
-                    conversation.last_message_sender_id === currentUserId
-                      ? `${t('chat.you')}: `
-                      : ''
-                  }${conversation.last_message_body}`
+              const ownPrefix = conversation.last_message_sender_id === currentUserId
+                ? `${t('chat.you')}: ` : ''
+              const preview = conversation.last_message_kind === 'photo'
+                ? `${ownPrefix}${t('chat.photo')}`
+                : conversation.last_message_kind === 'gif'
+                  ? `${ownPrefix}${t('chat.gif')}`
+                  : conversation.last_message_body
+                ? `${ownPrefix}${conversation.last_message_body}`
                 : t('chat.startConversation')
 
               return (

@@ -17,6 +17,9 @@ function message(
     conversation_id: 'conversation',
     sender_id: senderId,
     body: id,
+    kind: 'text',
+    media_path: null,
+    gif_id: null,
     created_at: `2026-08-18T10:00:0${id.length}.000Z`,
     delivery_status: sequence === null ? 'queued' : 'sent',
   }

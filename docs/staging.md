@@ -22,12 +22,17 @@ W zakresie Production stagingowego projektu należy ustawić:
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://<staging-project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<staging-anon-key>
+NEXT_PUBLIC_GIPHY_API_KEY=<webowy-klucz-GIPHY>
 SUPABASE_SERVICE_ROLE_KEY=<staging-service-role-key>
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=<staging-vapid-public-key>
 VAPID_PRIVATE_KEY=<staging-vapid-private-key>
 VAPID_SUBJECT=mailto:<adres-kontaktowy>
 NOTIFICATION_WEBHOOK_SECRET=<losowy-sekret-stagingu>
 ```
+
+Szuflada GIF-ów wymaga osobnego klucza GIPHY dla aplikacji webowej. Zapytania
+GIPHY wychodzą bezpośrednio z przeglądarki; klucz `NEXT_PUBLIC_GIPHY_API_KEY`
+jest publiczny. Bez klucza szuflada pokazuje komunikat o braku konfiguracji.
 
 Produkcja i staging mają osobne pary VAPID oraz osobne sekrety webhooka. `NEXT_PUBLIC_VAPID_PUBLIC_KEY` jest publiczną częścią pary; klucz prywatny, service-role i sekret webhooka są wyłącznie serwerowe. Zmiana zmiennych Vercel wymaga nowego deploymentu.
 

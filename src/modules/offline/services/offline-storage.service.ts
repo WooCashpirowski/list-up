@@ -5,9 +5,10 @@ import type {
 } from '../types/offline.types'
 
 const DATABASE_NAME = 'list-up-offline'
-const DATABASE_VERSION = 1
+const DATABASE_VERSION = 2
 const CACHE_STORE = 'cache'
 const OUTBOX_STORE = 'outbox'
+const PHOTO_STORE = 'chat-photos'
 const OUTBOX_USER_INDEX = 'by-user'
 
 export const OUTBOX_CHANGED_EVENT = 'list-up:outbox-changed'
@@ -52,6 +53,9 @@ function getDatabase(): Promise<IDBDatabase> {
       if (!database.objectStoreNames.contains(OUTBOX_STORE)) {
         const outbox = database.createObjectStore(OUTBOX_STORE, { keyPath: 'id' })
         outbox.createIndex(OUTBOX_USER_INDEX, 'userId', { unique: false })
+      }
+      if (!database.objectStoreNames.contains(PHOTO_STORE)) {
+        database.createObjectStore(PHOTO_STORE, { keyPath: 'messageId' })
       }
     }
 
@@ -185,6 +189,45 @@ export async function enqueueMutation(
 ): Promise<OutboxMutation> {
   const [mutation] = await enqueueMutations([input])
   return mutation
+}
+
+export async function enqueueChatPhoto(
+  input: QueueMutationInput,
+  blob: Blob,
+): Promise<void> {
+  const database = await getDatabase()
+  const transaction = database.transaction([OUTBOX_STORE, PHOTO_STORE], 'readwrite')
+  transaction.objectStore(PHOTO_STORE).put({ messageId: input.recordId, blob })
+  transaction.objectStore(OUTBOX_STORE).add({
+    ...input,
+    id: crypto.randomUUID(),
+    payload: input.payload ?? null,
+    createdAt: new Date().toISOString(),
+    sequence: nextMutationSequence(),
+    attempts: 0,
+    lastError: null,
+  } satisfies OutboxMutation)
+  await transactionComplete(transaction)
+  announceOutboxChange()
+}
+
+export async function getChatPhoto(messageId: string): Promise<Blob | null> {
+  const database = await getDatabase()
+  const transaction = database.transaction(PHOTO_STORE, 'readonly')
+  const record = await requestResult(transaction.objectStore(PHOTO_STORE).get(messageId))
+  await transactionComplete(transaction)
+  return (record as { blob: Blob } | undefined)?.blob ?? null
+}
+
+export async function completeChatPhotoMutation(
+  mutationId: string,
+  messageId: string,
+): Promise<void> {
+  const database = await getDatabase()
+  const transaction = database.transaction([OUTBOX_STORE, PHOTO_STORE], 'readwrite')
+  transaction.objectStore(OUTBOX_STORE).delete(mutationId)
+  transaction.objectStore(PHOTO_STORE).delete(messageId)
+  await transactionComplete(transaction)
 }
 
 export async function enqueueMutations(

@@ -12,6 +12,8 @@ import {
   enqueueMutation,
   enqueueMutations,
   getOutboxMutations,
+  getChatPhoto,
+  completeChatPhotoMutation,
   OUTBOX_SYNCED_EVENT,
   recordOutboxFailure,
   removeOutboxMutation,
@@ -120,10 +122,28 @@ async function executeMutation(
       throw new Error('Chat messages are immutable')
     }
 
+    const message = mutation.payload as ChatMessagesInsert
+    if (message.kind === 'photo') {
+      const blob = await getChatPhoto(mutation.recordId)
+      if (!blob) throw new Error('Queued photo is missing from this device')
+      const { error: uploadError } = await supabase.storage
+        .from('chat-photos')
+        .upload(message.media_path!, blob, { contentType: 'image/jpeg', upsert: false })
+      if (uploadError && uploadError.statusCode !== '409') throw uploadError
+    }
     const { error } = await supabase
       .from('chat_messages')
-      .insert(mutation.payload as ChatMessagesInsert)
+      .insert(message)
     if (error && error.code !== '23505') throw error
+    return
+  }
+
+  if (mutation.table === 'chat_reactions') {
+    const payload = mutation.payload as { message_id: string; emoji: string | null }
+    await supabase.rpc('set_chat_reaction', {
+      target_message_id: payload.message_id,
+      selected_emoji: payload.emoji,
+    }).throwOnError()
     return
   }
 
@@ -164,7 +184,11 @@ async function runSynchronization(
 
     try {
       await executeMutation(mutation, supabase)
-      await removeOutboxMutation(mutation.id)
+      if (mutation.table === 'chat_messages' && mutation.payload?.kind === 'photo') {
+        await completeChatPhotoMutation(mutation.id, mutation.recordId)
+      } else {
+        await removeOutboxMutation(mutation.id)
+      }
       synced += 1
     } catch (error) {
       lastError = getErrorMessage(error)

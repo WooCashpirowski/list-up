@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Bell,
   BellOff,
+  Camera,
   Check,
   CheckCheck,
   Clock3,
@@ -12,6 +13,7 @@ import {
   RefreshCw,
   Send,
   Settings,
+  SmilePlus,
   X,
 } from 'lucide-react'
 import {
@@ -34,12 +36,21 @@ import { getLatestIncomingSequence } from '../model/chat-messages'
 import type {
   ChatMessage,
   ChatMessageDeliveryStatus,
+  ChatReaction,
 } from '../types/chat.types'
+import { getGiphyByIds, isGiphyConfigured, trackGiphy, type GiphyGif } from '../services/giphy.service'
+import { normalizeChatPhoto } from '../services/photo-processing'
+import { ChatLinks } from './chat-links'
+import { ChatPhoto } from './chat-photo'
+import { GifDrawer } from './gif-drawer'
+import { GiphyAttribution } from './giphy-attribution'
+import { ReactionPicker } from './reaction-picker'
 
 export type ChatParticipant = {
   id: string
   email: string
   display_name: string
+  alias?: string | null
 }
 
 type ChatViewProps = {
@@ -54,6 +65,11 @@ type ChatViewProps = {
   isPeerTyping: boolean
   push: PushNotificationState
   onSendMessage: (body: string) => Promise<boolean>
+  onSendGif: (gifId: string) => Promise<boolean>
+  onSendPhoto: (blob: Blob) => Promise<boolean>
+  reactions: Map<string, ChatReaction>
+  onToggleReaction: (messageId: string, emoji: string) => Promise<void>
+  onSetPeerAlias: (alias: string | null) => Promise<boolean>
   onRetryMessage: (id: string) => Promise<void>
   onLoadOlder: () => Promise<void>
   onMarkReadThrough: (sequence: number) => Promise<void>
@@ -72,6 +88,13 @@ type MessageBubbleProps = {
   retryLabel: string
   statusLabel: string
   onRetry: (id: string) => void
+  reaction: ChatReaction | null
+  onOpenReaction: (id: string) => void
+  onToggleReaction: (id: string, emoji: string) => void
+  gif: GiphyGif | null
+  photoLabel: string
+  gifLabel: string
+  reactionLabel: string
 }
 
 const MessageBubble = memo(function MessageBubble({
@@ -84,7 +107,22 @@ const MessageBubble = memo(function MessageBubble({
   retryLabel,
   statusLabel,
   onRetry,
+  reaction,
+  onOpenReaction,
+  onToggleReaction,
+  gif,
+  photoLabel,
+  gifLabel,
+  reactionLabel,
 }: MessageBubbleProps) {
+  const holdTimer = useRef<number | null>(null)
+  const gifViewed = useRef(false)
+  const pointerStart = useRef({ x: 0, y: 0 })
+  const cancelHold = () => {
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current)
+    holdTimer.current = null
+  }
+  useEffect(() => () => cancelHold(), [])
   return (
     <div
       ref={isLatestIncoming ? latestIncomingRef : undefined}
@@ -92,6 +130,24 @@ const MessageBubble = memo(function MessageBubble({
       data-message-sequence={message.sequence ?? undefined}
     >
       <article
+        onPointerDown={(event) => {
+          if (own || event.pointerType === 'mouse') return
+          pointerStart.current = { x: event.clientX, y: event.clientY }
+          cancelHold()
+          holdTimer.current = window.setTimeout(() => onOpenReaction(message.id), 450)
+        }}
+        onPointerMove={(event) => {
+          if (Math.abs(event.clientX - pointerStart.current.x) > 10 ||
+            Math.abs(event.clientY - pointerStart.current.y) > 10) cancelHold()
+        }}
+        onPointerUp={cancelHold}
+        onPointerCancel={cancelHold}
+        onPointerLeave={cancelHold}
+        onContextMenu={(event) => {
+          if (own) return
+          event.preventDefault()
+          onOpenReaction(message.id)
+        }}
         className={cn(
           'surface-card max-w-[82%] rounded-3xl px-4 py-2.5',
           own
@@ -102,9 +158,24 @@ const MessageBubble = memo(function MessageBubble({
         {!own && (
           <p className="mb-1 text-xs font-semibold text-primary">{senderName}</p>
         )}
-        <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed">
-          {message.body}
-        </p>
+        {(message.kind ?? 'text') === 'text' &&
+          <p className="whitespace-pre-wrap break-words text-[15px] leading-relaxed">
+            <ChatLinks body={message.body} />
+          </p>}
+        {message.kind === 'photo' && <ChatPhoto message={message} label={photoLabel} />}
+        {message.kind === 'gif' && (gif?.images.fixed_width?.url || gif?.images.original?.url
+          ? <div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={gif.images.fixed_width?.url ?? gif.images.original?.url}
+                alt={gif.title || gifLabel} className="max-h-72 max-w-full rounded-xl"
+                onLoad={() => {
+                  if (gifViewed.current) return
+                  gifViewed.current = true
+                  trackGiphy(gif.analytics?.onload?.url)
+                }} />
+              <GiphyAttribution />
+            </div>
+          : <div className="rounded-xl bg-secondary px-6 py-8 text-sm text-muted-foreground">{gifLabel}</div>)}
         <div
           className={cn(
             'mt-1 flex items-center justify-end gap-1 text-[11px]',
@@ -150,7 +221,17 @@ const MessageBubble = memo(function MessageBubble({
               {retryLabel}
             </button>
           )}
+          {!own && <button type="button" onClick={() => onOpenReaction(message.id)}
+            aria-label={reactionLabel} className="ml-1 rounded-full p-1">
+            <SmilePlus className="size-4" />
+          </button>}
         </div>
+        {reaction && (own
+          ? <span aria-label={`${reactionLabel}: ${reaction.emoji}`}
+              className="mt-1 inline-block rounded-full bg-secondary px-2 py-0.5 text-base">{reaction.emoji}</span>
+          : <button type="button" aria-label={`${reactionLabel}: ${reaction.emoji}`}
+              onClick={() => onToggleReaction(message.id, reaction.emoji)}
+              className="mt-1 rounded-full bg-secondary px-2 py-0.5 text-base">{reaction.emoji}</button>)}
       </article>
     </div>
   )
@@ -194,6 +275,11 @@ export function ChatView({
   isPeerTyping,
   push,
   onSendMessage,
+  onSendGif,
+  onSendPhoto,
+  reactions,
+  onToggleReaction,
+  onSetPeerAlias,
   onRetryMessage,
   onLoadOlder,
   onMarkReadThrough,
@@ -205,6 +291,18 @@ export function ChatView({
   const [draft, setDraft] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [showNewMessages, setShowNewMessages] = useState(false)
+  const [reactionMessageId, setReactionMessageId] = useState<string | null>(null)
+  const [showGifDrawer, setShowGifDrawer] = useState(false)
+  const [showPhotoMenu, setShowPhotoMenu] = useState(false)
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [mediaError, setMediaError] = useState<string | null>(null)
+  const [gifMetadata, setGifMetadata] = useState(new Map<string, GiphyGif>())
+  const [giphyOnlineRevision, setGiphyOnlineRevision] = useState(0)
+  const requestedGifs = useRef(new Set<string>())
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { void import('heic2any').catch(() => undefined) }, [])
   const scrollRef = useRef<HTMLDivElement>(null)
   const latestIncomingRef = useRef<HTMLDivElement>(null)
   const nearBottomRef = useRef(true)
@@ -216,7 +314,45 @@ export function ChatView({
     () => getLatestIncomingSequence(messages, currentUserId),
     [currentUserId, messages],
   )
-  const peerName = useMemo(() => getProfileDisplayName(peer), [peer])
+  const peerName = useMemo(() => peer.alias || getProfileDisplayName(peer), [peer])
+
+  useEffect(() => {
+    const retry = () => setGiphyOnlineRevision((current) => current + 1)
+    window.addEventListener('online', retry)
+    return () => window.removeEventListener('online', retry)
+  }, [])
+
+  useEffect(() => {
+    if (!isGiphyConfigured()) return
+    const missing = [...new Set(messages.filter((message) => message.kind === 'gif')
+      .map((message) => message.gif_id).filter((id): id is string => Boolean(id)))]
+      .filter((id) => !gifMetadata.has(id) && !requestedGifs.current.has(id))
+    if (!missing.length) return
+    missing.forEach((id) => requestedGifs.current.add(id))
+    for (let offset = 0; offset < missing.length; offset += 50) {
+      void getGiphyByIds(missing.slice(offset, offset + 50)).then((items) => {
+        setGifMetadata((current) => new Map([...current, ...items.map((item) => [item.id, item] as const)]))
+      }).catch(() => {
+        missing.slice(offset, offset + 50).forEach((id) => requestedGifs.current.delete(id))
+      })
+    }
+  }, [gifMetadata, giphyOnlineRevision, messages])
+
+  useEffect(() => () => {
+    if (photoUrl) URL.revokeObjectURL(photoUrl)
+  }, [photoUrl])
+
+  async function choosePhoto(file: File | undefined) {
+    if (!file) return
+    setShowPhotoMenu(false)
+    setMediaError(null)
+    try {
+      const blob = await normalizeChatPhoto(file)
+      setPhotoBlob(blob)
+      setPhotoUrl(URL.createObjectURL(blob))
+    }
+    catch { setMediaError(t('chat.photoError')) }
+  }
   const deliveryLabels = useMemo<
     Record<Exclude<ChatMessageDeliveryStatus, 'failed'>, string>
   >(
@@ -455,6 +591,13 @@ export function ChatView({
                         : deliveryLabels[message.delivery_status]
                     }
                     onRetry={onRetryMessage}
+                    reaction={reactions.get(message.id) ?? null}
+                    onOpenReaction={setReactionMessageId}
+                    onToggleReaction={(id, emoji) => void onToggleReaction(id, emoji)}
+                    gif={message.gif_id ? gifMetadata.get(message.gif_id) ?? null : null}
+                    photoLabel={t('chat.photo')}
+                    gifLabel={t('chat.gif')}
+                    reactionLabel={t('chat.chooseReaction')}
                   />
                 </div>
               )
@@ -489,10 +632,15 @@ export function ChatView({
           event.preventDefault()
           void submit()
         }}
-        className="surface-glass z-20 border-t border-border bg-card/88 px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl"
+        className="surface-glass relative z-20 border-t border-border bg-card/88 px-4 pb-[calc(6.5rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl"
       >
-        {error && <p className="mb-2 text-xs text-destructive">{error}</p>}
+        {(error || mediaError) && <p className="mb-2 text-xs text-destructive">{error || mediaError}</p>}
         <div className="flex items-end gap-2">
+          <button type="button" onClick={() => setShowGifDrawer(true)}
+            aria-label={t('chat.gifs')}
+            className="surface-card flex size-11 shrink-0 items-center justify-center rounded-xl border border-border text-xs font-bold">
+            GIF
+          </button>
           <label htmlFor="chat-message" className="sr-only">
             {t('chat.messageLabel')}
           </label>
@@ -520,6 +668,11 @@ export function ChatView({
             placeholder={t('chat.placeholder')}
             className="max-h-32 min-h-12 min-w-0 flex-1 resize-none rounded-2xl border border-input bg-secondary px-4 py-3 text-base outline-none placeholder:text-muted-foreground focus:border-primary"
           />
+          <button type="button" onClick={() => setShowPhotoMenu((current) => !current)}
+            aria-label={t('chat.addPhoto')}
+            className="surface-card flex size-11 shrink-0 items-center justify-center rounded-xl border border-border">
+            <Camera className="size-5" />
+          </button>
           <button
             type="submit"
             disabled={!draft.trim()}
@@ -529,6 +682,18 @@ export function ChatView({
             <Send className="size-5" />
           </button>
         </div>
+        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment"
+          className="hidden" onChange={(event) => {
+            void choosePhoto(event.target.files?.[0]); event.target.value = ''
+          }} />
+        <input ref={galleryInputRef} type="file" accept="image/*,.heic,.heif"
+          className="hidden" onChange={(event) => {
+            void choosePhoto(event.target.files?.[0]); event.target.value = ''
+          }} />
+        {showPhotoMenu && <div className="absolute bottom-36 right-4 z-30 flex flex-col rounded-2xl border border-border bg-card p-2 shadow-lg">
+          <button type="button" className="px-4 py-2 text-left" onClick={() => cameraInputRef.current?.click()}>{t('chat.camera')}</button>
+          <button type="button" className="px-4 py-2 text-left" onClick={() => galleryInputRef.current?.click()}>{t('chat.gallery')}</button>
+        </div>}
       </form>
 
       {showSettings && (
@@ -537,28 +702,64 @@ export function ChatView({
           push={push}
           onClose={() => setShowSettings(false)}
           onUpdateDisplayName={onUpdateDisplayName}
+          peer={peer}
+          onSetPeerAlias={onSetPeerAlias}
         />
       )}
+      {reactionMessageId && <ReactionPicker
+        active={reactions.get(reactionMessageId)?.emoji ?? null}
+        onClose={() => setReactionMessageId(null)}
+        onSelect={(emoji) => {
+          void onToggleReaction(reactionMessageId, emoji)
+          setReactionMessageId(null)
+        }} />}
+      {showGifDrawer && <GifDrawer onClose={() => setShowGifDrawer(false)}
+        onSend={async (gif) => {
+          setGifMetadata((current) => new Map(current).set(gif.id, gif))
+          return onSendGif(gif.id)
+        }} />}
+      {photoBlob && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-4">
+        <section role="dialog" aria-modal="true" aria-label={t('chat.photoPreview')}
+          className="w-full max-w-md rounded-3xl bg-card p-4">
+          <h2 className="mb-3 font-semibold">{t('chat.photoPreview')}</h2>
+          {photoUrl && <>{/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoUrl} alt={t('chat.photoPreview')} className="max-h-[55dvh] w-full rounded-2xl object-contain" /></>}
+          <div className="mt-4 flex gap-2">
+            <button type="button" className="flex-1 rounded-xl bg-secondary p-3"
+              onClick={() => { setPhotoBlob(null); setPhotoUrl(null) }}>{t('common.cancel')}</button>
+            <button type="button" className="primary-action flex-1 rounded-xl p-3 text-primary-foreground"
+              onClick={async () => { if (await onSendPhoto(photoBlob)) { setPhotoBlob(null); setPhotoUrl(null) } }}>
+              {t('chat.sendPhoto')}
+            </button>
+          </div>
+        </section>
+      </div>}
     </div>
   )
 }
 
 export function ChatSettings({
   currentProfile,
+  peer,
   push,
   onClose,
   onUpdateDisplayName,
+  onSetPeerAlias,
 }: {
   currentProfile: ChatParticipant | null
+  peer?: ChatParticipant
   push: PushNotificationState
   onClose: () => void
   onUpdateDisplayName: (displayName: string) => Promise<boolean>
+  onSetPeerAlias?: (alias: string | null) => Promise<boolean>
 }) {
   const { t } = useI18n()
   const [name, setName] = useState(
     currentProfile ? getProfileDisplayName(currentProfile) : '',
   )
   const [isSaving, setIsSaving] = useState(false)
+  const [alias, setAlias] = useState(peer?.alias ?? '')
+  const [isSavingAlias, setIsSavingAlias] = useState(false)
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -591,7 +792,7 @@ export function ChatSettings({
         role="dialog"
         aria-modal="true"
         aria-labelledby="chat-settings-title"
-        className="surface-glass w-full max-w-md rounded-3xl border border-border bg-card/95 p-5 backdrop-blur-xl"
+        className="surface-glass max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-border bg-card/95 p-5 backdrop-blur-xl"
       >
         <div className="flex items-center justify-between">
           <h2 id="chat-settings-title" className="text-xl font-semibold">
@@ -617,6 +818,35 @@ export function ChatSettings({
           onChange={(event) => setName(event.target.value)}
           className="w-full rounded-2xl border border-input bg-secondary px-4 py-3 outline-none focus:border-primary"
         />
+
+        {peer && onSetPeerAlias && <div className="mt-5 border-t border-border pt-4">
+          <label htmlFor="chat-peer-alias" className="mb-2 block text-sm font-semibold">
+            {t('chat.peerAlias')}
+          </label>
+          <p className="mb-2 text-xs text-muted-foreground">{t('chat.peerAliasHint')}</p>
+          <input id="chat-peer-alias" value={alias} maxLength={60}
+            onChange={(event) => setAlias(event.target.value)}
+            placeholder={getProfileDisplayName(peer)}
+            className="w-full rounded-2xl border border-input bg-secondary px-4 py-3 outline-none focus:border-primary" />
+          <div className="mt-2 flex gap-2">
+            <button type="button" disabled={isSavingAlias || !alias.trim() || alias.trim() === (peer.alias ?? '')}
+              onClick={async () => {
+                setIsSavingAlias(true)
+                await onSetPeerAlias(alias)
+                setIsSavingAlias(false)
+              }} className="primary-action flex-1 rounded-xl py-2 text-sm text-primary-foreground disabled:opacity-50">
+              {t('chat.saveAlias')}
+            </button>
+            {peer.alias && <button type="button" disabled={isSavingAlias}
+              onClick={async () => {
+                setIsSavingAlias(true)
+                if (await onSetPeerAlias(null)) setAlias('')
+                setIsSavingAlias(false)
+              }} className="rounded-xl bg-secondary px-3 py-2 text-sm disabled:opacity-50">
+              {t('chat.resetAlias')}
+            </button>}
+          </div>
+        </div>}
 
         <div className="mt-5 rounded-2xl border border-border bg-secondary/60 p-4">
           <div className="flex items-start gap-3">

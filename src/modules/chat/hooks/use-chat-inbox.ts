@@ -77,6 +77,19 @@ export function useChatInbox(userId: string) {
     }
   }, [acknowledgeInboxDeliveries, gateway, userId])
 
+  const setPeerAlias = useCallback(async (peerId: string, alias: string | null): Promise<boolean> => {
+    const trimmed = alias?.trim() || null
+    if (trimmed && trimmed.length > 60) return false
+    try {
+      await gateway.setPeerAlias(peerId, trimmed)
+      await refresh()
+      return true
+    } catch (nextError) {
+      setError(getErrorMessage(nextError))
+      return false
+    }
+  }, [gateway, refresh])
+
   useEffect(() => {
     let mounted = true
     void getCachedCollection<ChatConversationSummary>(userId, 'chat-inbox')
@@ -119,5 +132,6 @@ export function useChatInbox(userId: string) {
     isLoading,
     error,
     refresh,
+    setPeerAlias,
   }
 }

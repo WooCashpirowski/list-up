@@ -52,6 +52,8 @@ hasła kont i lokalne sekrety. Wolumeny mają te same nazwy; zmiana portów nie
 resetuje danych.
 
 Przeglądarka korzysta z `NEXT_PUBLIC_SUPABASE_URL=http://localhost:44321`.
+Opcjonalny `NEXT_PUBLIC_GIPHY_API_KEY` w `.env.local` włącza wyszukiwanie GIF-ów;
+testy przeglądarkowe używają atrap odpowiedzi GIPHY i klucza testowego.
 Serwer w kontenerze używa `SUPABASE_URL=http://host.docker.internal:44321`.
 Lokalny webhook z PostgreSQL trafia na
 `http://host.docker.internal:3000/api/notifications/dispatch`.

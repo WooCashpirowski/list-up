@@ -210,6 +210,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
                             email: selectedConversation.peer_email,
                             display_name:
                                 selectedConversation.peer_display_name,
+                            alias: selectedConversation.peer_alias,
                         }}
                         messages={chatState.messages}
                         isLoading={chatState.isLoading}
@@ -224,6 +225,11 @@ function AuthenticatedApp({ userId }: { userId: string }) {
                         onMarkReadThrough={chatState.markReadThrough}
                         onTypingChange={chatState.setTyping}
                         onUpdateDisplayName={profilesState.updateDisplayName}
+                        onSetPeerAlias={(alias) => chatInboxState.setPeerAlias(selectedConversation.peer_id, alias)}
+                        onSendGif={chatState.sendGif}
+                        onSendPhoto={chatState.sendPhoto}
+                        reactions={chatState.reactions}
+                        onToggleReaction={chatState.toggleReaction}
                         onBack={backToChatInbox}
                     />
                 ) : (

@@ -2,6 +2,7 @@ import type { AppSupabaseClient } from '@/src/lib/supabase/service-client'
 
 import type {
   ChatConversationSummary,
+  ChatReaction,
   CreateChatMessageInput,
   PersistedChatMessage,
   ChatReceiptState,
@@ -79,6 +80,39 @@ export async function getInbox(
     ...conversation,
     unread_count: Number(conversation.unread_count),
   }))
+}
+
+export async function getReactions(
+  conversationId: string,
+  supabase: AppSupabaseClient,
+): Promise<ChatReaction[]> {
+  const { data } = await supabase.from('chat_message_reactions').select('*')
+    .eq('conversation_id', conversationId).throwOnError()
+  return data
+}
+
+export async function setReaction(
+  messageId: string, emoji: string | null, supabase: AppSupabaseClient,
+): Promise<void> {
+  await supabase.rpc('set_chat_reaction', {
+    target_message_id: messageId,
+    selected_emoji: emoji,
+  }).throwOnError()
+}
+
+export async function setPeerAlias(
+  peerId: string, alias: string | null, supabase: AppSupabaseClient,
+): Promise<void> {
+  await supabase.rpc('set_chat_peer_alias', {
+    target_peer_id: peerId,
+    selected_alias: alias,
+  }).throwOnError()
+}
+
+export async function downloadPhoto(path: string, supabase: AppSupabaseClient): Promise<Blob> {
+  const { data, error } = await supabase.storage.from('chat-photos').download(path)
+  if (error) throw error
+  return data
 }
 
 export async function getPeerReceipt(

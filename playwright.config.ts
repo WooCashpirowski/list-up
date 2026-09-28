@@ -43,6 +43,7 @@ export default defineConfig({
   ],
   webServer: process.env.E2E_USE_RUNNING_SERVER === '1' ? undefined : {
     command: `node ./node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port ${port}`,
+    env: { NEXT_PUBLIC_GIPHY_API_KEY: process.env.NEXT_PUBLIC_GIPHY_API_KEY ?? 'e2e-giphy-key' },
     url: baseURL,
     reuseExistingServer: !process.env.CI && process.env.E2E_ENVIRONMENT !== 'staging',
     timeout: 120_000,

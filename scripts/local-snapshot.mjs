@@ -268,12 +268,19 @@ async function restoreSnapshot(directory) {
     await updateLocalEnv();
     await sql(statement, { capture: true });
     const { client } = await localAdmin();
+    const { data: migratedBuckets, error: migratedBucketsError } =
+        await client.storage.listBuckets();
+    if (migratedBucketsError) throw migratedBucketsError;
+    const migratedBucketIds = new Set(migratedBuckets.map((bucket) => bucket.id));
     for (const bucket of manifest.storage.buckets) {
-        const { error } = await client.storage.createBucket(bucket.id, {
+        const options = {
             public: bucket.public,
             fileSizeLimit: bucket.file_size_limit,
             allowedMimeTypes: bucket.allowed_mime_types,
-        });
+        };
+        const { error } = migratedBucketIds.has(bucket.id)
+            ? await client.storage.updateBucket(bucket.id, options)
+            : await client.storage.createBucket(bucket.id, options);
         if (error) throw error;
     }
     for (const object of manifest.storage.objects) {
